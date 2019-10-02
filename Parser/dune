@@ -1,0 +1,6 @@
+(menhir
+ (flags -v)
+ (modules Parser))
+
+(library
+ (name Parser))
