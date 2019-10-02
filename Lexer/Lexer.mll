@@ -1,4 +1,4 @@
-{
+ {
   open Parser
 
   let incr_linenum lexbuf =
@@ -17,14 +17,14 @@ let big_letter = ['A'-'Z']
 let id = (small_letter | big_letter) (small_letter | big_letter | digit | '_')*
 let white = [' ' '\t' '\r' '\n']
 let esc = '\\'['n' 't' 'r' '0' '\\' '\"' '\'']
-let char = [^'\\'] | esc
+let char = [^'\\' '\"' '\''] | esc
 
 rule lexer = parse
-| digit+
-| digit* frac? exp?
-| "\'"char"\'"
-| "\""char*"\"" as const { T_const const }
-| id as id { T_id id }
+| '.' { T_dot }
+| digit+ as inum { T_int_const (int_of_string inum) }
+| digit* frac? exp? as fnum { T_real_const (float_of_string fnum) }
+| "\'"char"\'" as c { T_char_const (String.get c 1) }
+| "\""char*"\"" as str { T_string_literal (String.sub str 1 (String.length str - 2)) }
 | "do" { T_do }
 | "while" { T_while }
 | "if" { T_if }
@@ -77,31 +77,12 @@ rule lexer = parse
 | ',' { T_comma }
 | '[' { T_lbrack }
 | ']' { T_rbrack }
+| id as id { T_id id }
 | white+ { lexer lexbuf }
 | "(*" { comment lexbuf }
-| _ { print_string "malakia egrapses panika\n"}
+| _ as c { Printf.eprintf "malakia egrapses panika: '%c' (ascii: %d)\n" c (Char.code c);
+           lexer lexbuf }
 | eof { T_eof }
 and comment = parse
 | "*)" { lexer lexbuf }
 | _ { comment lexbuf }
-
-{
-
-  let test lexbuf =
-    match lexer lexbuf with
-    | T_eof -> ()
-    | _ as bla -> print_string Lexing.lexeme lexbuf; test lexbuf
-
-  let main () =
-    let cin =
-      if Array.length Sys.argv > 1
-      then open_in Sys.argv.(1)
-      else stdin
-    in
-    let lexbuf = Lexing.from_channel cin in
-    test lexbuf
-
-
-  let _ = Printexc.print main ()
-
-}
