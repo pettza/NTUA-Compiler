@@ -7,6 +7,22 @@
       Lexing.pos_lnum = pos.Lexing.pos_lnum + 1;
       Lexing.pos_bol = pos.Lexing.pos_cnum
     }
+
+  let char_for_backslash = function
+    'n' -> '\010'
+  | 'r' -> '\013'
+  | 'b' -> '\008'
+  | 't' -> '\009'
+  | c   -> c
+
+  exception Lexical_error of string * string * int * int
+  
+  let raise_lexical_error lexbuf msg =
+    let p = Lexing.lexeme_start_p lexbuf in
+    raise (Lexical_error (msg,
+                          p.Lexing.pos_fname,
+                          p.Lexing.pos_lnum,
+                          p.Lexing.pos_cnum - p.Lexing.pos_bol + 1))
 }
 
 let digit = ['0'-'9']
@@ -15,16 +31,21 @@ let exp = ['e' 'E'] ['-' '+']? digit+
 let small_letter = ['a'-'z']
 let big_letter = ['A'-'Z']
 let id = (small_letter | big_letter) (small_letter | big_letter | digit | '_')*
-let white = [' ' '\t' '\r' '\n']
+let white = [' ' '\t']
+let newline = ['\r' '\n']
 let esc = '\\'['n' 't' 'r' '0' '\\' '\"' '\'']
-let char = [^'\\' '\"' '\''] | esc
 
 rule lexer = parse
 | '.' { T_dot }
 | digit+ as inum { T_int_const (int_of_string inum) }
 | digit* frac? exp? as fnum { T_real_const (float_of_string fnum) }
-| "\'"char"\'" as c { T_char_const (String.get c 1) }
-| "\""char*"\"" as str { T_string_literal (String.sub str 1 (String.length str - 2)) }
+| '\'' [^ '\\'] '\'' { T_char_const (Lexing.lexeme_char lexbuf 1) }
+| '\'' esc '\'' { T_char_const (char_for_backslash @@ Lexing.lexeme_char lexbuf 2)  }
+| '\'' '\\' (_ as c)
+    { raise_lexical_error lexbuf
+        (Printf.sprintf "Illegal escape sequence \\%c" c)
+    }
+| '\"' { T_string_literal (string "" lexbuf) }
 | "do" { T_do }
 | "while" { T_while }
 | "if" { T_if }
@@ -79,10 +100,31 @@ rule lexer = parse
 | ']' { T_rbrack }
 | id as id { T_id id }
 | white+ { lexer lexbuf }
+| newline { incr_linenum lexbuf; lexer lexbuf }
 | "(*" { comment lexbuf }
-| _ as c { Printf.eprintf "malakia egrapses panika: '%c' (ascii: %d)\n" c (Char.code c);
-           lexer lexbuf }
+| _ as c
+  { raise_lexical_error lexbuf
+      (Printf.sprintf "Illigal character: '%c' (ascii: %d)" c (Char.code c));
+  }
 | eof { T_eof }
+
+and string acc = parse
+| '\"' { acc }
+| newline
+  { raise_lexical_error lexbuf
+      (Printf.sprintf "newline charecter inside string literal")
+  }
+| esc 
+  { let c = Char.escaped @@ char_for_backslash @@ Lexing.lexeme_char lexbuf 1 in
+    string (acc ^ c) lexbuf
+  }
+| '\\' (_ as c)
+  { raise_lexical_error lexbuf
+      (Printf.sprintf "illegal escape sequence \\%c" c)
+  }
+| _ as c { string (acc ^ (Char.escaped c)) lexbuf }
+
 and comment = parse
 | "*)" { lexer lexbuf }
+| newline { incr_linenum lexbuf; comment lexbuf }
 | _ { comment lexbuf }
