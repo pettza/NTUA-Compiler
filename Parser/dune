@@ -3,4 +3,5 @@
  (modules Parser))
 
 (library
- (name Parser))
+ (name Parser)
+ (libraries Ast))

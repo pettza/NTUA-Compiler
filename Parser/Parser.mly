@@ -1,3 +1,7 @@
+%{
+  open Ast
+%}
+
 (* Flow control *)
 %token T_do "do"
 %token T_while "while"
@@ -29,6 +33,7 @@
 %token <char> T_char_const
 %token <string> T_string_literal
 
+(* Identidiers *)
 %token <string> T_id
 
 (* Boolean stuff *)
@@ -71,111 +76,136 @@
 %token T_lbrack "["
 %token T_rbrack "]"
 
+(* End of file *)
 %token T_eof
 
+(* Priority and assosiativity *)
 %nonassoc "=" "<" ">" "<=" ">=" "<>"
 %left "+" "-" "or"
 %left "*" "/" "div" "mod" "and"
 %nonassoc "not"
-(* unary ops *)
 %nonassoc "^"
 %nonassoc "@"
 %nonassoc "then"
 %nonassoc "else"
 
-%start <unit> program
+(* Entry point *)
+%start <Ast.ast> program
 
 %%
 
 program:
-  | "program" T_id ";" body "." T_eof   { print_string "program"; print_newline () }
+  | "program" prog_name = T_id ";" body = body "." T_eof { { prog_name; body } }
+
 
 body:
-  | local* block  { print_string "body"; print_newline () }
+  | decls = local* block = block  { { decls; block } }
+
 
 local:
-  | "var" nonempty_list(separated_nonempty_list(",", T_id) ":" pcl_type ";" {})  { print_string "local"; print_newline () }
-  | "label" separated_nonempty_list(",", T_id) ";"  { print_string "local"; print_newline () }
-  | header ";" body ";"  { print_string "local"; print_newline () }
-  | "forward" header ";"  { print_string "local"; print_newline () }
+  | "var" l = nonempty_list( l = separated_nonempty_list(",", T_id) ":" t = pcl_type ";" { (l, t) })  { Loc_var l }
+  | "label" l = separated_nonempty_list(",", T_id) ";"  { Loc_label l }
+  | h = header ";" b = body ";"  { Loc_def (h, b)}
+  | "forward" h = header ";"  { Loc_decl h }
+
 
 header:
-  | "procedure" T_id "(" separated_list(";", formal) ")"  { print_string "header"; print_newline () }
-  | "function" T_id "(" separated_list(";", formal) ")" ":" pcl_type  { print_string "header"; print_newline () }
+  | "procedure" id = T_id "(" l = separated_list(";", formal) ")"  { H_proc (id, l) }
+  | "function" id = T_id "(" l = separated_list(";", formal) ")" ":" t = pcl_noarray_type  { H_func (id, l, t) }
+
 
 formal:
-  | "var"? separated_nonempty_list(",", T_id) ":" pcl_type  { print_string "formal"; print_newline () }
+  | "var" l = separated_nonempty_list(",", T_id) ":" t = pcl_type  { F_byref (l, t) }
+  | l = separated_nonempty_list(",", T_id) ":" t = pcl_noarray_type { F_byval (l, t) }
+
+
+pcl_noarray_type:
+  | "integer"  { Typ_int }
+  | "real"  { Typ_real }
+  | "boolean"  { Typ_bool }
+  | "char"  { Typ_char }
+  | "^" t = pcl_type  { Typ_pointer t }
+
+
+pcl_complete_type:
+  | t = pcl_noarray_type { t }
+  | "array" "[" size =  T_int_const "]" "of" t = pcl_complete_type  { Typ_array (Some size, t) }
+
 
 pcl_type:
-  | "integer"  { print_string "pcl_type"; print_newline () }
-  | "real"  { print_string "pcl_type"; print_newline () }
-  | "boolean"  { print_string "pcl_type"; print_newline () }
-  | "char"  { print_string "pcl_type"; print_newline () }
-  | "array" option("[" T_int_const "]" {}) "of" pcl_type  { print_string "pcl_type"; print_newline () }
-  | "^" pcl_type  { print_string "pcl_type"; print_newline () }
+  | t = pcl_complete_type { t }
+  | "array" "of" t = pcl_complete_type  { Typ_array (None, t) }
+
 
 block:
-  | "begin" separated_nonempty_list(";", stmt) "end"  { print_string "block"; print_newline () }
+  | "begin" l = separated_nonempty_list(";", stmt) "end"  { l }
+
 
 stmt:
-  |  { print_string "stmt"; print_newline () }
-  | l_value ":=" expr  { print_string "stmt"; print_newline () }
-  | block  { print_string "stmt"; print_newline () }
-  | call  { print_string "stmt"; print_newline () }
-  | "if" expr "then" stmt  { print_string "stmt"; print_newline () }
-  | "if" expr "then" stmt "else" stmt  { print_string "stmt"; print_newline () }
-  | "while" expr "do" stmt  { print_string "stmt"; print_newline () }
-  | T_id ":" stmt  { print_string "stmt"; print_newline () }
-  | "goto" T_id  { print_string "stmt"; print_newline () }
-  | "return"  { print_string "stmt"; print_newline () }
-  | "new" option("[" expr "]" {}) l_value  { print_string "stmt"; print_newline () }
-  | "dispose" option("[" "]" {}) l_value  { print_string "stmt"; print_newline () }
+  |  { St_empty }
+  | lv = l_value ":=" e = expr  { St_assign (lv, e) }
+  | b = block  { St_block b }
+  | c = call { St_call c }
+  | "if" e = expr "then" s = stmt  { St_if (e, s, None) }
+  | "if" e = expr "then" s1 = stmt "else" s2 = stmt  { St_if (e, s1, Some s2) }
+  | "while" e = expr "do" s = stmt  { St_while (e, s) }
+  | id = T_id ":" s = stmt  { St_label (id, s) }
+  | "goto" id = T_id  { St_goto id }
+  | "return"  { St_return }
+  | "new" e = option("[" e = expr "]" { e }) lv = l_value  { St_new (e, lv) }
+  | "dispose" option("[" "]" {}) lv = l_value  { St_dispose lv }
+
 
 %inline expr: 
-  | l_value  { print_string "expr"; print_newline () }
-  | r_value  { print_string "expr"; print_newline () }
+  | lv = l_value  { E_lvalue lv }
+  | rv = r_value  { E_rvalue rv }
+
 
 l_value:
-  | T_id  { print_string "l_value"; print_newline () }
-  | "result"  { print_string "l_value"; print_newline () }
-  | T_string_literal  { print_string "l_value"; print_newline () }
-  | l_value "[" expr "]"  { print_string "l_value"; print_newline () }
-  | expr "^"  { print_string "l_value"; print_newline () }
-  | "(" l_value ")"  { print_string "l_value"; print_newline () }
+  | id = T_id  { Lv_id id }
+  | "result"  { Lv_result }
+  | str = T_string_literal  { Lv_string str }
+  | lv = l_value "[" e = expr "]"  { Lv_array (lv, e) }
+  | e = expr "^"  { Lv_deref e }
+  | "(" lv = l_value ")"  { lv }
+
 
 r_value:
-  | T_int_const  { print_string "r_value"; print_newline () }
-  | "true"  { print_string "r_value"; print_newline () }
-  | "false"  { print_string "r_value"; print_newline () }
-  | T_real_const  { print_string "r_value"; print_newline () }
-  | T_char_const  { print_string "r_value"; print_newline () }
-  | "(" r_value ")"  { print_string "r_value"; print_newline () }
-  | "nil"  { print_string "r_value"; print_newline () }
-  | call  { print_string "r_value"; print_newline () }
-  | "@" l_value  { print_string "r_value"; print_newline () }
-  | unop expr  { print_string "r_value"; print_newline () }
-  | expr binop expr  { print_string "r_value"; print_newline () }
+  | inum = T_int_const  { Rv_int inum }
+  | "true"  { Rv_bool true }
+  | "false"  { Rv_bool false }
+  | fnum = T_real_const  { Rv_real fnum }
+  | c = T_char_const  { Rv_char c }
+  | "(" rv = r_value ")"  { rv }
+  | "nil"  { Rv_nil }
+  | c = call  { Rv_call c }
+  | "@" lv = l_value  { Rv_ref lv }
+  | unop = unop e = expr  { Rv_unop (unop, e) }
+  | e1 = expr binop = binop e2 = expr  { Rv_binop (e1, binop, e2) }
+
 
 call:
-  | T_id "(" separated_list(",", expr) ")"  { print_string "call"; print_newline () }
+  | routine_name = T_id "(" args = separated_list(",", expr) ")"  { { routine_name; args } }
+
 
 %inline unop:
-  | "not"  { print_string "unop"; print_newline () }
-  | "+"  { print_string "unop"; print_newline () }
-  | "-"  { print_string "unop"; print_newline () }
+  | "not"  { Uop_not }
+  | "+"  { Uop_plus }
+  | "-"  { Uop_minus }
+
 
 %inline binop:
-  | "+"  { print_string "binop"; print_newline () }
-  | "-"  { print_string "binop"; print_newline () }
-  | "*"  { print_string "binop"; print_newline () }
-  | "/"  { print_string "binop"; print_newline () }
-  | "div"  { print_string "binop"; print_newline () }
-  | "mod"  { print_string "binop"; print_newline () }
-  | "or"  { print_string "binop"; print_newline () }
-  | "and"  { print_string "binop"; print_newline () }
-  | "="  { print_string "binop"; print_newline () }
-  | "<>"  { print_string "binop"; print_newline () }
-  | "<"  { print_string "binop"; print_newline () }
-  | "<="  { print_string "binop"; print_newline () }
-  | ">"  { print_string "binop"; print_newline () }
-  | ">="  { print_string "binop"; print_newline () }
+  | "+"  { Bop_plus }
+  | "-"  { Bop_minus }
+  | "*"  { Bop_times }
+  | "/"  { Bop_rdiv }
+  | "div"  { Bop_div }
+  | "mod"  { Bop_mod }
+  | "or"  { Bop_or }
+  | "and"  { Bop_and }
+  | "="  { Bop_eq }
+  | "<>"  { Bop_neq }
+  | "<"  { Bop_less }
+  | "<="  { Bop_leq }
+  | ">"  { Bop_greater }
+  | ">="  { Bop_geq }
