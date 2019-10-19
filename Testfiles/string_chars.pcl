@@ -1,0 +1,8 @@
+program string_chars;
+
+    var s : array of char; c : char;
+
+    begin
+        s := "\n"; 
+        c := ''';
+    end.

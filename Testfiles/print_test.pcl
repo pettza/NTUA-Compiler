@@ -1,0 +1,9 @@
+program string_chars;
+
+    var s : array of char; x : integer;
+    label bla;
+
+    begin
+        bla: s := "\n "; 
+        x := (1 + -2)*3;
+    end.
