@@ -1,5 +1,6 @@
 %{
   open Ast
+  open Symtbl
 %}
 
 (* Flow control *)
@@ -95,28 +96,44 @@
 %%
 
 program:
-  | "program" prog_name = T_id ";" body = body "." T_eof { { prog_name; body } }
+  | "program" prog_name = T_id ";" body = body "." T_eof
+    {
+      let prog_name = id_of_string prog_name in 
+      { prog_name; body }
+    }
 
 
 body:
   | decls = local* block = block  { { decls; block } }
 
 
+id_list:
+  | l = separated_nonempty_list(",", T_id) { List.map id_of_string l }
+
+
 local:
-  | "var" l = nonempty_list( l = separated_nonempty_list(",", T_id) ":" t = pcl_type ";" { (l, t) })  { Loc_var l }
-  | "label" l = separated_nonempty_list(",", T_id) ";"  { Loc_label l }
+  | "var" l = nonempty_list( l = id_list ":" t = pcl_type ";" { (l, t) })  { Loc_var l }
+  | "label" l = id_list ";"  { Loc_label l }
   | h = header ";" b = body ";"  { Loc_def (h, b)}
   | "forward" h = header ";"  { Loc_decl h }
 
 
 header:
-  | "procedure" id = T_id "(" l = separated_list(";", formal) ")"  { H_proc (id, l) }
-  | "function" id = T_id "(" l = separated_list(";", formal) ")" ":" t = pcl_noarray_type  { H_func (id, l, t) }
+  | "procedure" id = T_id "(" l = separated_list(";", formal) ")" 
+    { 
+      let id = id_of_string id in
+      H_proc (id, l)
+    }
+  | "function" id = T_id "(" l = separated_list(";", formal) ")" ":" t = pcl_noarray_type
+    {
+      let id = id_of_string id in
+      H_func (id, (l, t))
+    }
 
 
 formal:
-  | "var" l = separated_nonempty_list(",", T_id) ":" t = pcl_type  { F_byref (l, t) }
-  | l = separated_nonempty_list(",", T_id) ":" t = pcl_noarray_type { F_byval (l, t) }
+  | "var" l = id_list ":" t = pcl_type  { F_byref (l, t) }
+  | l = id_list ":" t = pcl_noarray_type { F_byval (l, t) }
 
 
 pcl_noarray_type:
@@ -149,11 +166,11 @@ stmt:
   | "if" e = expr "then" s = stmt  { St_if (e, s, None) }
   | "if" e = expr "then" s1 = stmt "else" s2 = stmt  { St_if (e, s1, Some s2) }
   | "while" e = expr "do" s = stmt  { St_while (e, s) }
-  | id = T_id ":" s = stmt  { St_label (id, s) }
-  | "goto" id = T_id  { St_goto id }
+  | id = T_id ":" s = stmt  { St_label ((id_of_string id), s) }
+  | "goto" id = T_id  { St_goto (id_of_string id) }
   | "return"  { St_return }
   | "new" e = option("[" e = expr "]" { e }) lv = l_value  { St_new (e, lv) }
-  | "dispose" option("[" "]" {}) lv = l_value  { St_dispose lv }
+  | "dispose" paren = option("[" "]" { () }) lv = l_value  { St_dispose (paren, lv) }
 
 
 %inline expr: 
@@ -162,7 +179,7 @@ stmt:
 
 
 l_value:
-  | id = T_id  { Lv_id id }
+  | id = T_id  { Lv_id (id_of_string id) }
   | "result"  { Lv_result }
   | str = T_string_literal  { Lv_string str }
   | lv = l_value "[" e = expr "]"  { Lv_array (lv, e) }
@@ -185,7 +202,11 @@ r_value:
 
 
 call:
-  | routine_name = T_id "(" args = separated_list(",", expr) ")"  { { routine_name; args } }
+  | routine_name = T_id "(" args = separated_list(",", expr) ")"
+    { 
+      let routine_name = id_of_string routine_name in
+      { routine_name; args }
+    }
 
 
 %inline unop:

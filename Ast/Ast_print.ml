@@ -1,104 +1,5 @@
-type pcl_type =
-  | Typ_int
-  | Typ_real
-  | Typ_bool
-  | Typ_char
-  | Typ_array of int option * pcl_type
-  | Typ_pointer of pcl_type
-
-
-type id = string
-
-
-type unop =
-  | Uop_not
-  | Uop_plus
-  | Uop_minus
-
-
-type binop =
-  | Bop_plus
-  | Bop_minus
-  | Bop_times
-  | Bop_rdiv
-  | Bop_div
-  | Bop_mod
-  | Bop_or
-  | Bop_and
-  | Bop_eq
-  | Bop_neq
-  | Bop_less
-  | Bop_leq
-  | Bop_greater
-  | Bop_geq
-
-
-type ast = { prog_name : id; body : ast_body }
-
-
-and ast_body = { decls : ast_local list; block : ast_block }
-
-
-and ast_local =
-  | Loc_var of (id list * pcl_type) list
-  | Loc_label of id list
-  | Loc_def of ast_header * ast_body
-  | Loc_decl of ast_header
-
-
-and ast_header =
-  | H_proc of id * ast_formal list
-  | H_func of id * ast_formal list * pcl_type
-
-
-and ast_formal =
-  | F_byval of id list * pcl_type
-  | F_byref of id list * pcl_type
-
-
-and ast_block = ast_stmt list
-
-
-and ast_stmt =
-  | St_empty
-  | St_assign of ast_lvalue * ast_expr
-  | St_block of ast_block
-  | St_call of ast_call
-  | St_if of ast_expr * ast_stmt * ast_stmt option
-  | St_while of ast_expr * ast_stmt
-  | St_label of id * ast_stmt
-  | St_goto of id
-  | St_return
-  | St_new of ast_expr option * ast_lvalue
-  | St_dispose of ast_lvalue
-
-
-and ast_call = { routine_name : id; args : ast_expr list }
-
-
-and ast_expr =
-  | E_lvalue of ast_lvalue
-  | E_rvalue of ast_rvalue
-
-
-and ast_lvalue =
-  | Lv_id of id
-  | Lv_result
-  | Lv_string of string
-  | Lv_array of ast_lvalue * ast_expr
-  | Lv_deref of ast_expr
-
-
-and ast_rvalue =
-  | Rv_int of int
-  | Rv_bool of bool
-  | Rv_real of float
-  | Rv_char of char
-  | Rv_nil
-  | Rv_call of ast_call
-  | Rv_ref of ast_lvalue
-  | Rv_unop of unop * ast_expr
-  | Rv_binop of ast_expr * binop * ast_expr
+open Ast
+open Symtbl
 
 
 let make_tabs ~tabs = String.make tabs '\t'
@@ -144,11 +45,11 @@ let string_of_list to_string = function
   | h::t -> List.fold_left (fun acc x -> Printf.sprintf "%s, %s" acc (to_string x)) (to_string h) t
 
 
-let string_of_id_list = string_of_list Fun.id
+let string_of_id_list = string_of_list string_of_id
 
 
 let rec print_ast { prog_name; body } =
-  Printf.printf "Program: %s\nBody:\n" prog_name;
+  Printf.printf "Program: %s\nBody:\n" (string_of_id prog_name);
   print_ast_body body ~tabs:1
 
 
@@ -175,9 +76,9 @@ and print_ast_block ~tabs ast_body =
 
 and print_ast_header ~tabs = function
   | H_proc (name, formals) ->
-    Printf.printf "%sproc %s(%s)\n" (make_tabs ~tabs) name (string_of_ast_formals formals)
-  | H_func (name, formals, pcl_type) ->
-    Printf.printf "%sfunc %s(%s) : %s\n" (make_tabs ~tabs) name (string_of_ast_formals formals) (string_of_type pcl_type)
+    Printf.printf "%sproc %s(%s)\n" (make_tabs ~tabs) (string_of_id name) (string_of_ast_formals formals)
+  | H_func (name, (formals, pcl_type)) ->
+    Printf.printf "%sfunc %s(%s) : %s\n" (make_tabs ~tabs) (string_of_id name) (string_of_ast_formals formals) (string_of_type pcl_type)
 
 
 and string_of_ast_formals ast_formals =
@@ -211,18 +112,19 @@ and print_ast_stmt ~tabs = function
     Printf.printf "%swhile %s\n" (make_tabs ~tabs) (string_of_ast_expr expr);
     print_ast_stmt stmt ~tabs:(tabs+1)
   | St_label (label, stmt) ->
-    Printf.printf "%s%s:\n" (make_tabs ~tabs) label;
+    Printf.printf "%s%s:\n" (make_tabs ~tabs) (string_of_id label);
     print_ast_stmt stmt ~tabs:(tabs+1)
   | St_goto id ->
-    Printf.printf "%sgoto %s\n" (make_tabs ~tabs) id 
+    Printf.printf "%sgoto %s\n" (make_tabs ~tabs) (string_of_id id) 
   | St_return ->
     Printf.printf "%sreturn from routine\n" (make_tabs ~tabs)
   | St_new (None, lvalue) ->
     Printf.printf "%snew %s\n" (make_tabs ~tabs) (string_of_ast_lvalue lvalue)
   | St_new (Some expr, lvalue) ->
     Printf.printf "%snew[%s] %s\n" (make_tabs ~tabs) (string_of_ast_expr expr) (string_of_ast_lvalue lvalue)
-  | St_dispose lvalue ->
-    Printf.printf "%sdispose %s\n" (make_tabs ~tabs) (string_of_ast_lvalue lvalue)
+  | St_dispose (paren_opt, lvalue) ->
+    let paren = Option.(value ~default:"" @@ map (Fun.const "[]") paren_opt) in
+    Printf.printf "%sdispose%s %s\n" (make_tabs ~tabs) paren (string_of_ast_lvalue lvalue)
 
 
 and string_of_ast_expr = function
@@ -231,7 +133,7 @@ and string_of_ast_expr = function
 
 
 and string_of_ast_lvalue = function
-  | Lv_id id -> id
+  | Lv_id id -> string_of_id id
   | Lv_result -> "result"
   | Lv_string str -> Printf.sprintf "\"%s\"" str
   | Lv_array (lvalue, expr) -> Printf.sprintf "%s[%s]" (string_of_ast_lvalue lvalue) (string_of_ast_expr expr)
@@ -252,4 +154,4 @@ and string_of_ast_rvalue = function
 
 
 and string_of_ast_call { routine_name; args } =
-  Printf.sprintf "%s(%s)" routine_name (string_of_list string_of_ast_expr args)
+  Printf.sprintf "%s(%s)" (string_of_id routine_name) (string_of_list string_of_ast_expr args)

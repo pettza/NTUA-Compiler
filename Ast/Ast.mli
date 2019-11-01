@@ -1,27 +1,15 @@
 (** Types for the abstract syntax tree and funtions to handle it *)
 
-(** Type of pcl types *)
-type pcl_type =
-  | Typ_int
-  | Typ_real
-  | Typ_bool
-  | Typ_char
-  | Typ_array of int option * pcl_type
-  | Typ_pointer of pcl_type
+open Symtbl
 
 
-(** Identifier type *)
-type id = string
-
-
-(** Unary operator type *)
 type unop =
   | Uop_not
   | Uop_plus
   | Uop_minus
+(** Unary operator type *)
 
 
-(** Binary operator type *)
 type binop =
   | Bop_plus
   | Bop_minus
@@ -37,43 +25,37 @@ type binop =
   | Bop_leq
   | Bop_greater
   | Bop_geq
+(** Binary operator type *)
 
 
 (* Mutually recursive types for the abstract syntax tree *)
-(** Type of the whole program *)
+
 type ast = { prog_name : id; body : ast_body }
+(** Type of the whole program *)
 
 
-(** Type of body of program or routine *)
 and ast_body = { decls : ast_local list; block : ast_block }
+(** Type of body of program or routine *)
 
 
-(** Type of local declarations/definitions *)
 and ast_local =
   | Loc_var of (id list * pcl_type) list
   | Loc_label of id list
   | Loc_def of ast_header * ast_body
   | Loc_decl of ast_header
+(** Type of local declarations/definitions *)
 
 
-(** Type of routine headers *)
 and ast_header =
-  | H_proc of id * ast_formal list
-  | H_func of id * ast_formal list * pcl_type
+  | H_proc of id * proc_type
+  | H_func of id * func_type
+(** Type of routine headers *)
 
 
-(** Type of formal parameters.
-They can be declared in groups of same type and evaluation strategy *)
-and ast_formal =
-  | F_byval of id list * pcl_type
-  | F_byref of id list * pcl_type
-
-
-(** Type of statement block *)
 and ast_block = ast_stmt list
+(** Type of statement block *)
 
 
-(** Type of statement *)
 and ast_stmt =
   | St_empty
   | St_assign of ast_lvalue * ast_expr
@@ -85,29 +67,29 @@ and ast_stmt =
   | St_goto of id
   | St_return
   | St_new of ast_expr option * ast_lvalue
-  | St_dispose of ast_lvalue
+  | St_dispose of unit option * ast_lvalue
+(** Type of statement *)
 
 
-(** Type of routine call *)
 and ast_call = { routine_name : id; args : ast_expr list }
+(** Type of routine call *)
 
 
-(** Type of expration *)
 and ast_expr =
   | E_lvalue of ast_lvalue
   | E_rvalue of ast_rvalue
+(** Type of expration *)
 
 
-(** Type of lvalue *)
 and ast_lvalue =
   | Lv_id of id
   | Lv_result
   | Lv_string of string
   | Lv_array of ast_lvalue * ast_expr
   | Lv_deref of ast_expr
+(** Type of lvalue *)
 
 
-(** Type of rvalue *)
 and ast_rvalue =
   | Rv_int of int
   | Rv_bool of bool
@@ -118,7 +100,4 @@ and ast_rvalue =
   | Rv_ref of ast_lvalue
   | Rv_unop of unop * ast_expr
   | Rv_binop of ast_expr * binop * ast_expr
-
-
-(** Prints the Ast *)
-val print_ast : ast -> unit
+(** Type of rvalue *)
