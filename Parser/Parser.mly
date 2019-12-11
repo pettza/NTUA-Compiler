@@ -112,7 +112,8 @@ id_list:
 
 
 local:
-  | "var" l = nonempty_list( l = id_list ":" t = pcl_type ";" { (l, t) })  { Loc_var l }
+  | "var" l = nonempty_list( l = id_list ":" t = pcl_type ";" { List.map (fun id -> (id, t)) l }) 
+    { Loc_var (List.concat l) }
   | "label" l = id_list ";"  { Loc_label l }
   | h = header ";" b = body ";"  { Loc_def (h, b)}
   | "forward" h = header ";"  { Loc_decl h }
@@ -122,18 +123,18 @@ header:
   | "procedure" id = T_id "(" l = separated_list(";", formal) ")" 
     { 
       let id = id_of_string id in
-      H_proc (id, l)
+      H_proc (id, List.concat l)
     }
   | "function" id = T_id "(" l = separated_list(";", formal) ")" ":" t = pcl_noarray_type
     {
       let id = id_of_string id in
-      H_func (id, (l, t))
+      H_func (id, (List.concat l, t))
     }
 
 
 formal:
-  | "var" l = id_list ":" t = pcl_type  { F_byref (l, t) }
-  | l = id_list ":" t = pcl_noarray_type { F_byval (l, t) }
+  | "var" l = id_list ":" t = pcl_type  { List.map (fun id -> F_byref(id, t)) l }
+  | l = id_list ":" t = pcl_noarray_type { List.map (fun id -> F_byval(id, t)) l }
 
 
 pcl_noarray_type:

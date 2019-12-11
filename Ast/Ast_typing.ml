@@ -11,7 +11,7 @@ let ids_of_decls decls =
     | H_proc (id, _) -> id
   in
   let ids_of_decl = function
-    | Loc_var vars -> List.(concat @@ map fst vars) 
+    | Loc_var vars -> List.map fst vars 
     | Loc_label labels -> labels
     | Loc_def (header, _)
     | Loc_decl header -> [id_of_header header]
@@ -20,11 +20,11 @@ let ids_of_decls decls =
 
 
 let ids_of_formals formals =
-  let ids_of_formal = function
-    | F_byref (ids, _)
-    | F_byval (ids, _) -> ids
+  let id_of_formal = function
+    | F_byref (id, _)
+    | F_byval (id, _) -> id
   in
-  List.(concat @@ map ids_of_formal formals)
+  List.map id_of_formal formals
 
 
 let check_duplicate_ids ids =
@@ -37,6 +37,17 @@ let check_duplicate_ids ids =
       raise @@ TypingError (Printf.sprintf "Duplicate definition of %s" id)
   in
   ignore @@ List.fold_left try_add IdSet.empty ids
+
+
+let is_assignable lhs_type rhs_type =
+  match lhs_type, rhs_type with
+  | Typ_real, Typ_int -> true
+  | Typ_pointer Typ_array (Some _, pcl_type1), Typ_pointer Typ_array (None, pcl_type2)
+  | pcl_type1, pcl_type2 -> pcl_type1 = pcl_type2
+
+
+let is_referencable lhs_type rhs_type =
+  is_assignable (Typ_pointer lhs_type) (Typ_pointer rhs_type)
 
 
 let rec typecheck_ast { prog_name; body } =
@@ -55,10 +66,10 @@ and typecheck_ast_body ~symtbl { decls; block } =
 and typecheck_add_ast_local ~symtbl = function
   | Loc_var vars ->
     List.fold_left 
-      (fun symtbl (ids, pcl_type) -> add_list ids (Variable pcl_type) symtbl)
+      (fun symtbl (id, pcl_type) -> add id (Variable pcl_type) symtbl)
       symtbl
       vars
-  | Loc_label labels -> add_list labels Label symtbl
+  | Loc_label labels -> add_list labels (Label { used=false }) symtbl
   | Loc_def (header, body) ->
     let symtbl' = typecheck_add_ast_header ~symtbl header in
     let get_formals = function
@@ -66,8 +77,8 @@ and typecheck_add_ast_local ~symtbl = function
       | H_func (_, (formals, _)) -> formals
     in
     let add_formal symtbl = function
-      | F_byref (ids, pcl_type)
-      | F_byval (ids, pcl_type) -> add_list ids (Variable pcl_type) symtbl
+      | F_byref (id, pcl_type)
+      | F_byval (id, pcl_type) -> add id (Variable pcl_type) symtbl
     in
     let symtbl'' =
       List.fold_left add_formal symtbl' @@ get_formals header 
@@ -98,7 +109,10 @@ and typecheck_ast_stmt stmt ~symtbl =
   let check_label id =
     try
       match find id symtbl with
-      | Label -> ()
+      | Label l when l.used = false -> l.used <- true
+      | Label { used=true } ->
+        raise @@ TypingError
+          (Printf.sprintf "label %s is used at other point in code" (string_of_id id))
       | _ ->
         raise @@ TypingError (Printf.sprintf "%s is not a label" (string_of_id id))
     with Not_found ->
@@ -129,7 +143,7 @@ and typecheck_ast_stmt stmt ~symtbl =
         end
       | _ ->
         let e_type = type_of_ast_expr expr ~symtbl in
-        if l_type = e_type then () 
+        if is_assignable l_type e_type then () 
         else
           raise @@ TypingError
             (Printf.sprintf "%s is assigned an expression of invalid type"
@@ -305,7 +319,7 @@ and typecheck_unop unop e_type =
       raise @@ TypingError "Logical nagation applied to non-boolean expession"
     else ()
   | Uop_plus | Uop_minus as unop ->
-    if e_type <> Typ_int || e_type <> Typ_real then
+    if e_type <> Typ_int && e_type <> Typ_real then
       let s = Ast_print.string_of_unop unop in
       raise @@ TypingError (Printf.sprintf "Unary %s applied to non-arithmetic expession" s)
     else ()
@@ -320,19 +334,27 @@ and type_of_binop binop e1_type e2_type =
     | Typ_real -> true
     | _ -> false
   in
+  let is_arithmetic = function
+    | Typ_int | Typ_real -> true
+    | _ -> false
+  in
   let is_bool = function
     | Typ_bool -> true
     | _ -> false
   in
   match binop with
   | Bop_plus | Bop_minus | Bop_times ->
-    if (is_int e1_type || is_real e1_type) && e1_type = e2_type
-    then e1_type
-    else raise @@ TypingError "Type mismatch"
+    if is_arithmetic e1_type && is_arithmetic e2_type 
+    then 
+      if e1_type = e2_type
+      then e1_type
+      else Typ_real
+    else raise @@ TypingError 
+      (Printf.sprintf "%s applied to non arithmetic type" @@ Ast_print.string_of_binop binop)
   | Bop_rdiv ->
-    if is_real e1_type && is_real e2_type
-    then e1_type
-    else raise @@ TypingError "Type mismatch"
+    if is_arithmetic e1_type && is_arithmetic e2_type
+    then Typ_real
+    else raise @@ TypingError "/ applied to non arithmetic type"
   | Bop_div
   | Bop_mod ->
     if is_int e1_type && is_int e2_type
@@ -362,30 +384,32 @@ and type_of_binop binop e1_type e2_type =
 
 
 and type_of_ast_call { routine_name; args } ~symtbl =
-  let check_args formals =
-    let types_of_formals =
-      List.(concat @@ map
-        (function | F_byref (ids, pcl_type) | F_byval (ids, pcl_type) ->
-          map (fun _ -> pcl_type) ids)
-        formals) 
-    in
-    try
-      if List.(for_all ((=) true) @@ map2 (=) types_of_formals @@ map (type_of_ast_expr ~symtbl) args)
-      then ()
-      else
-        raise @@ TypingError "Type mismatch"
-    with Invalid_argument _ ->
-      raise @@ TypingError 
+  let rec check_args = function
+    | [], [] -> ()
+    | _, [] | [], _ ->
+      raise @@ TypingError
         (Printf.sprintf "Wrong number of arguments in call to %s"
         @@ string_of_id routine_name)
+    | F_byval (_, pcl_type) :: formals, expr::exprs ->
+      if is_assignable pcl_type @@ type_of_ast_expr expr ~symtbl
+      then check_args (formals, exprs)
+      else
+        raise @@ TypingError "Type mismatch"
+    | F_byref (_, pcl_type) :: formals, E_lvalue lvalue :: exprs ->
+      if is_referencable pcl_type @@ type_of_ast_lvalue lvalue ~symtbl
+      then check_args (formals, exprs)
+      else
+        raise @@ TypingError "Type mismatch"
+    | _ ->
+      raise @@ TypingError "Actual parameter of var declared formal must be lvalue"
   in
   try
     match find routine_name symtbl with
     | Function (formals, pcl_type) ->
-      check_args formals;
+      check_args (formals, args);
       Some pcl_type
     | Procedure formals ->
-      check_args formals;
+      check_args (formals, args);
       None
     | _ ->
       raise @@ TypingError

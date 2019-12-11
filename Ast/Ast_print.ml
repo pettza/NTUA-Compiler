@@ -63,7 +63,7 @@ and print_ast_body ~tabs { decls; block } =
 and print_ast_local ~tabs = function
   | Loc_var vars ->
     List.iter
-      (fun (ids, pcl_type) -> Printf.printf "%s%s : %s\n" (make_tabs ~tabs) (string_of_id_list ids) (string_of_type pcl_type))
+      (fun (id, pcl_type) -> Printf.printf "%s%s : %s\n" (make_tabs ~tabs) (string_of_id id) (string_of_type pcl_type))
       vars
   | Loc_label labels -> Printf.printf "%s%s : labels\n" (make_tabs ~tabs) (string_of_id_list labels)
   | Loc_def (header, body) -> print_ast_header header ~tabs; print_ast_body body ~tabs:(tabs+1)
@@ -82,14 +82,9 @@ and print_ast_header ~tabs = function
 
 
 and string_of_ast_formals ast_formals =
-  let to_string_element formal =
-    let to_string_aux ids pcl_type =
-      Printf.sprintf "%s : %s"
-        (string_of_id_list ids) (string_of_type pcl_type)
-    in
-    match formal with
-    | F_byval (ids, pcl_type) -> Printf.sprintf "val %s" (to_string_aux ids pcl_type)
-    | F_byref (ids, pcl_type) -> Printf.sprintf "ref %s" (to_string_aux ids pcl_type)
+  let to_string_element = function
+    | F_byval (id, pcl_type) -> Printf.sprintf "val %s : %s" (string_of_id id) (string_of_type pcl_type)
+    | F_byref (id, pcl_type) -> Printf.sprintf "ref %s : %s" (string_of_id id) (string_of_type pcl_type)
   in
   string_of_list to_string_element ast_formals
 

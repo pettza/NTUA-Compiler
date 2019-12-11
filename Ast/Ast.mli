@@ -2,7 +2,6 @@
 
 open Symtbl
 
-
 type unop =
   | Uop_not
   | Uop_plus
@@ -39,7 +38,7 @@ and ast_body = { decls : ast_local list; block : ast_block }
 
 
 and ast_local =
-  | Loc_var of (id list * pcl_type) list
+  | Loc_var of (id * pcl_type) list
   | Loc_label of id list
   | Loc_def of ast_header * ast_body
   | Loc_decl of ast_header

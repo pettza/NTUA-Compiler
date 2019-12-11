@@ -30,8 +30,8 @@ let is_array = function
 
 
 type formal =
-  | F_byval of id list * pcl_type
-  | F_byref of id list * pcl_type
+  | F_byval of id * pcl_type
+  | F_byref of id * pcl_type
 
 
 type proc_type = formal list
@@ -42,7 +42,7 @@ type func_type = formal list * pcl_type
 
 type sym_entry =
   | Program
-  | Label
+  | Label of { mutable used:bool }
   | Variable of pcl_type
   | Procedure of proc_type
   | Function of func_type

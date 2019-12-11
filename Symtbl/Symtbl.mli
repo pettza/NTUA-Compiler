@@ -32,8 +32,8 @@ val is_array : pcl_type -> bool
 
 
 type formal =
-  | F_byval of id list * pcl_type
-  | F_byref of id list * pcl_type
+  | F_byval of id * pcl_type
+  | F_byref of id * pcl_type
 (** Type of formal arguments.
 They can be declared in groups of same type and evaluation strategy *)
 
@@ -48,7 +48,7 @@ type func_type = formal list * pcl_type
 
 type sym_entry =
   | Program
-  | Label
+  | Label of { mutable used:bool }
   | Variable of pcl_type
   | Procedure of proc_type
   | Function of func_type
