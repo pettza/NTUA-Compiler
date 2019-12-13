@@ -1,4 +1,7 @@
 (include_subdirs unqualified)
 
+
 (executable
- (name Main))
+ (name Main)
+ (modules_without_implementation ast)
+ (libraries llvm))
