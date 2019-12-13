@@ -2,17 +2,11 @@
 A symbol table is a map with keys of type id and values of type sym_entry *)
 
 
-module Id : Set.OrderedType
+module Id : Set.OrderedType with type t = string
 
 
 type id = Id.t
 (** Identifier type *)
-
-
-val id_of_string : string -> id
-
-
-val string_of_id : id -> string
 
 
 type pcl_type =
@@ -45,17 +39,21 @@ type proc_type = formal list
 type func_type = formal list * pcl_type
 (** Type of functions *)
 
+type def_record = { def:bool }
+(** Type of record for sym entry of routines *)
+
 
 type sym_entry =
   | Program
   | Label of { mutable used:bool }
   | Variable of pcl_type
-  | Procedure of proc_type
-  | Function of func_type
+  | Procedure of proc_type * def_record
+  | Function of func_type * def_record
 (** Type of symbol table entrys *)
 
 
 include Map.S with type key := id
 
+val add_tbl : 'a t -> 'a t -> 'a t
 
 val add_list : id list -> 'a -> 'a t -> 'a t

@@ -45,11 +45,11 @@ let string_of_list to_string = function
   | h::t -> List.fold_left (fun acc x -> Printf.sprintf "%s, %s" acc (to_string x)) (to_string h) t
 
 
-let string_of_id_list = string_of_list string_of_id
+let string_of_id_list = string_of_list (fun x -> x)
 
 
 let rec print_ast { prog_name; body } =
-  Printf.printf "Program: %s\nBody:\n" (string_of_id prog_name);
+  Printf.printf "Program: %s\nBody:\n" prog_name;
   print_ast_body body ~tabs:1
 
 
@@ -63,7 +63,7 @@ and print_ast_body ~tabs { decls; block } =
 and print_ast_local ~tabs = function
   | Loc_var vars ->
     List.iter
-      (fun (id, pcl_type) -> Printf.printf "%s%s : %s\n" (make_tabs ~tabs) (string_of_id id) (string_of_type pcl_type))
+      (fun (id, pcl_type) -> Printf.printf "%s%s : %s\n" (make_tabs ~tabs) id (string_of_type pcl_type))
       vars
   | Loc_label labels -> Printf.printf "%s%s : labels\n" (make_tabs ~tabs) (string_of_id_list labels)
   | Loc_def (header, body) -> print_ast_header header ~tabs; print_ast_body body ~tabs:(tabs+1)
@@ -76,15 +76,15 @@ and print_ast_block ~tabs ast_body =
 
 and print_ast_header ~tabs = function
   | H_proc (name, formals) ->
-    Printf.printf "%sproc %s(%s)\n" (make_tabs ~tabs) (string_of_id name) (string_of_ast_formals formals)
+    Printf.printf "%sproc %s(%s)\n" (make_tabs ~tabs) name (string_of_ast_formals formals)
   | H_func (name, (formals, pcl_type)) ->
-    Printf.printf "%sfunc %s(%s) : %s\n" (make_tabs ~tabs) (string_of_id name) (string_of_ast_formals formals) (string_of_type pcl_type)
+    Printf.printf "%sfunc %s(%s) : %s\n" (make_tabs ~tabs) name (string_of_ast_formals formals) (string_of_type pcl_type)
 
 
 and string_of_ast_formals ast_formals =
   let to_string_element = function
-    | F_byval (id, pcl_type) -> Printf.sprintf "val %s : %s" (string_of_id id) (string_of_type pcl_type)
-    | F_byref (id, pcl_type) -> Printf.sprintf "ref %s : %s" (string_of_id id) (string_of_type pcl_type)
+    | F_byval (id, pcl_type) -> Printf.sprintf "val %s : %s" id (string_of_type pcl_type)
+    | F_byref (id, pcl_type) -> Printf.sprintf "ref %s : %s" id (string_of_type pcl_type)
   in
   string_of_list to_string_element ast_formals
 
@@ -107,10 +107,10 @@ and print_ast_stmt ~tabs = function
     Printf.printf "%swhile %s\n" (make_tabs ~tabs) (string_of_ast_expr expr);
     print_ast_stmt stmt ~tabs:(tabs+1)
   | St_label (label, stmt) ->
-    Printf.printf "%s%s:\n" (make_tabs ~tabs) (string_of_id label);
+    Printf.printf "%s%s:\n" (make_tabs ~tabs) label;
     print_ast_stmt stmt ~tabs:(tabs+1)
   | St_goto id ->
-    Printf.printf "%sgoto %s\n" (make_tabs ~tabs) (string_of_id id) 
+    Printf.printf "%sgoto %s\n" (make_tabs ~tabs) id 
   | St_return ->
     Printf.printf "%sreturn from routine\n" (make_tabs ~tabs)
   | St_new (None, lvalue) ->
@@ -128,7 +128,7 @@ and string_of_ast_expr = function
 
 
 and string_of_ast_lvalue = function
-  | Lv_id id -> string_of_id id
+  | Lv_id id -> id
   | Lv_result -> "result"
   | Lv_string str -> Printf.sprintf "\"%s\"" str
   | Lv_array (lvalue, expr) -> Printf.sprintf "%s[%s]" (string_of_ast_lvalue lvalue) (string_of_ast_expr expr)
@@ -149,4 +149,4 @@ and string_of_ast_rvalue = function
 
 
 and string_of_ast_call { routine_name; args } =
-  Printf.sprintf "%s(%s)" (string_of_id routine_name) (string_of_list string_of_ast_expr args)
+  Printf.sprintf "%s(%s)" routine_name (string_of_list string_of_ast_expr args)

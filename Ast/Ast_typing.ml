@@ -4,6 +4,36 @@ open Symtbl
 
 exception TypingError of string
 
+let update_entry id sym_entry symtbl = 
+  let check_duplicate sym_entry = function
+    | None -> Some sym_entry
+    | Some Function (func_type1, { def=false }) ->
+      begin
+        match sym_entry with
+        | Function (func_type2, _) when func_type1 = func_type2 -> Some sym_entry
+        | Function (_, _) -> 
+          raise @@ TypingError
+            (Printf.sprintf "function %s declared with different type at other point in code" id)
+        | _ ->
+          raise @@ TypingError
+            (Printf.sprintf "duplicate id %s" id)
+      end
+    | Some Procedure (proc_type1, { def=false }) ->
+      begin
+        match sym_entry with
+        | Procedure (proc_type2, _) when proc_type1 = proc_type2 -> Some sym_entry
+        | Procedure (_, _) -> 
+          raise @@ TypingError
+            (Printf.sprintf "procedure %s declared with different type at other point in code" id)
+        | _ ->
+          raise @@ TypingError
+            (Printf.sprintf "duplicate id %s" id)
+      end
+    | _ ->
+      raise @@ TypingError
+        (Printf.sprintf "duplicate id %s" id)
+  in
+    update id (check_duplicate sym_entry) symtbl
 
 let ids_of_decls decls =
   let id_of_header = function
@@ -13,8 +43,8 @@ let ids_of_decls decls =
   let ids_of_decl = function
     | Loc_var vars -> List.map fst vars 
     | Loc_label labels -> labels
-    | Loc_def (header, _)
-    | Loc_decl header -> [id_of_header header]
+    | Loc_def (header, _) -> [id_of_header header]
+    | Loc_decl _ -> []
   in
   List.(concat @@ map ids_of_decl decls)
 
@@ -33,7 +63,7 @@ let check_duplicate_ids ids =
     match IdSet.find_opt id s with
     | None -> IdSet.add id s
     | Some _ -> 
-      let id = string_of_id id in
+      let id = id in
       raise @@ TypingError (Printf.sprintf "Duplicate definition of %s" id)
   in
   ignore @@ List.fold_left try_add IdSet.empty ids
@@ -51,27 +81,33 @@ let is_referencable lhs_type rhs_type =
 
 
 let rec typecheck_ast { prog_name; body } =
-  let symtbl = singleton prog_name Program in
+  let symtbl = 
+    singleton prog_name Program 
+  in
   typecheck_ast_body ~symtbl body
 
 
 and typecheck_ast_body ~symtbl { decls; block } =
   check_duplicate_ids @@ ids_of_decls decls;
   let symtbl' =
-    List.fold_left (fun symtbl -> typecheck_add_ast_local ~symtbl) symtbl decls
+    List.fold_left (fun symtbl_loc -> typecheck_add_ast_local ~symtbl ~symtbl_loc) empty decls
   in
-  typecheck_ast_block ~symtbl:symtbl' block
+  typecheck_ast_block ~symtbl:(add_tbl symtbl symtbl') block
 
 
-and typecheck_add_ast_local ~symtbl = function
+and typecheck_add_ast_local ~symtbl ~symtbl_loc = function
   | Loc_var vars ->
     List.fold_left 
-      (fun symtbl (id, pcl_type) -> add id (Variable pcl_type) symtbl)
-      symtbl
+      (fun symtbl (id, pcl_type) -> update_entry id (Variable pcl_type) symtbl)
+      symtbl_loc
       vars
-  | Loc_label labels -> add_list labels (Label { used=false }) symtbl
+  | Loc_label labels -> 
+    List.fold_left 
+      (fun symtbl label -> update_entry label (Label { used=false }) symtbl)
+      symtbl_loc
+      labels
   | Loc_def (header, body) ->
-    let symtbl' = typecheck_add_ast_header ~symtbl header in
+    let symtbl' = typecheck_add_ast_header true ~symtbl_loc header in
     let get_formals = function
       | H_proc (_, formals)
       | H_func (_, (formals, _)) -> formals
@@ -86,24 +122,23 @@ and typecheck_add_ast_local ~symtbl = function
     let symtbl''' = 
       match header with
       | H_proc _ -> symtbl''
-      | H_func (_, (_, pcl_type)) -> add (id_of_string "result") (Variable pcl_type) symtbl''
+      | H_func (_, (_, pcl_type)) -> add "result" (Variable pcl_type) symtbl''
     in
-    typecheck_ast_body ~symtbl:symtbl''' body;
+    typecheck_ast_body ~symtbl:(add_tbl symtbl symtbl''') body;
     symtbl'
-  | Loc_decl header -> typecheck_add_ast_header ~symtbl header
+  | Loc_decl header -> typecheck_add_ast_header false ~symtbl_loc header
 
 
 and typecheck_ast_block ~symtbl block = List.iter (typecheck_ast_stmt ~symtbl) block
 
 
-and typecheck_add_ast_header ~symtbl = function
+and typecheck_add_ast_header def ~symtbl_loc = function
   | H_proc (id, formals) ->
     check_duplicate_ids @@ id :: ids_of_formals formals;
-    add id (Procedure formals) symtbl
+    update_entry id (Procedure (formals, { def=def })) symtbl_loc
   | H_func (id, (formals, pcl_type)) ->
     check_duplicate_ids @@ id :: ids_of_formals formals;
-    add id (Function (formals, pcl_type)) symtbl
-
+    update_entry id (Function ((formals, pcl_type), { def=def })) symtbl_loc
 
 and typecheck_ast_stmt stmt ~symtbl =
   let check_label id =
@@ -112,11 +147,11 @@ and typecheck_ast_stmt stmt ~symtbl =
       | Label l when l.used = false -> l.used <- true
       | Label { used=true } ->
         raise @@ TypingError
-          (Printf.sprintf "label %s is used at other point in code" (string_of_id id))
+          (Printf.sprintf "label %s is used at other point in code" id)
       | _ ->
-        raise @@ TypingError (Printf.sprintf "%s is not a label" (string_of_id id))
+        raise @@ TypingError (Printf.sprintf "%s is not a label" id)
     with Not_found ->
-      raise @@ TypingError (Printf.sprintf "Undeclared label %s" (string_of_id id))
+      raise @@ TypingError (Printf.sprintf "Undeclared label %s" id)
   in
   let check_bool expr =
     match type_of_ast_expr expr ~symtbl with
@@ -235,14 +270,14 @@ and type_of_ast_lvalue ~symtbl = function
         match find id symtbl with
         | Variable pcl_type -> pcl_type
         | _ ->
-          raise @@ TypingError (Printf.sprintf "%s is not a valid lvalue" (string_of_id id)) 
+          raise @@ TypingError (Printf.sprintf "%s is not a valid lvalue" id) 
       with Not_found ->
-        raise @@ TypingError (Printf.sprintf "Undeclared variable %s" (string_of_id id)) 
+        raise @@ TypingError (Printf.sprintf "Undeclared variable %s" id) 
     end
   | Lv_result ->
     begin
       try
-        let res_id = id_of_string "result" in
+        let res_id = "result" in
         match find res_id symtbl with
         | Variable pcl_type -> pcl_type
         | _ ->
@@ -293,8 +328,7 @@ and type_of_ast_rvalue ~symtbl = function
       | None -> 
         let { routine_name=id; _ } = call in
         raise @@ TypingError 
-          (Printf.sprintf "Procedure %s cannot be called in expression"
-          @@ string_of_id id)
+          (Printf.sprintf "Procedure %s cannot be called in expression" id)
     end
   | Rv_ref lvalue -> Typ_pointer (type_of_ast_lvalue lvalue ~symtbl)
   | Rv_unop (unop, expr) ->
@@ -388,8 +422,7 @@ and type_of_ast_call { routine_name; args } ~symtbl =
     | [], [] -> ()
     | _, [] | [], _ ->
       raise @@ TypingError
-        (Printf.sprintf "Wrong number of arguments in call to %s"
-        @@ string_of_id routine_name)
+        (Printf.sprintf "Wrong number of arguments in call to %s" routine_name)
     | F_byval (_, pcl_type) :: formals, expr::exprs ->
       if is_assignable pcl_type @@ type_of_ast_expr expr ~symtbl
       then check_args (formals, exprs)
@@ -405,15 +438,15 @@ and type_of_ast_call { routine_name; args } ~symtbl =
   in
   try
     match find routine_name symtbl with
-    | Function (formals, pcl_type) ->
+    | Function ((formals, pcl_type), _) ->
       check_args (formals, args);
       Some pcl_type
-    | Procedure formals ->
+    | Procedure (formals, _) ->
       check_args (formals, args);
       None
     | _ ->
       raise @@ TypingError
-        (Printf.sprintf "%s is not callable" @@ string_of_id routine_name)
+        (Printf.sprintf "%s is not callable" routine_name)
   with Not_found ->
     raise @@ TypingError
-      (Printf.sprintf "Undeclared routine %s" @@ string_of_id routine_name)
+      (Printf.sprintf "Undeclared routine %s" routine_name)

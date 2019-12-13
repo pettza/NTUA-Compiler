@@ -1,5 +1,16 @@
 program solve;
+    forward function readInteger () : integer;
 
+    procedure writeString(var ofh: array of char);
+    begin
+    readInteger();
+    end;
+
+    function readInteger () : integer;
+    begin
+    writeString("of");
+    end;
+    
     var numberOfRings : integer;
     
     procedure hanoi (var source, target, auxiliary : array of char;

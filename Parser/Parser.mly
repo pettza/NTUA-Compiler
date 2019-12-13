@@ -98,7 +98,7 @@
 program:
   | "program" prog_name = T_id ";" body = body "." T_eof
     {
-      let prog_name = id_of_string prog_name in 
+      let prog_name = prog_name in 
       { prog_name; body }
     }
 
@@ -108,7 +108,7 @@ body:
 
 
 id_list:
-  | l = separated_nonempty_list(",", T_id) { List.map id_of_string l }
+  | l = separated_nonempty_list(",", T_id) { l }
 
 
 local:
@@ -122,12 +122,12 @@ local:
 header:
   | "procedure" id = T_id "(" l = separated_list(";", formal) ")" 
     { 
-      let id = id_of_string id in
+      let id = id in
       H_proc (id, List.concat l)
     }
   | "function" id = T_id "(" l = separated_list(";", formal) ")" ":" t = pcl_noarray_type
     {
-      let id = id_of_string id in
+      let id = id in
       H_func (id, (List.concat l, t))
     }
 
@@ -167,8 +167,8 @@ stmt:
   | "if" e = expr "then" s = stmt  { St_if (e, s, None) }
   | "if" e = expr "then" s1 = stmt "else" s2 = stmt  { St_if (e, s1, Some s2) }
   | "while" e = expr "do" s = stmt  { St_while (e, s) }
-  | id = T_id ":" s = stmt  { St_label ((id_of_string id), s) }
-  | "goto" id = T_id  { St_goto (id_of_string id) }
+  | id = T_id ":" s = stmt  { St_label (id, s) }
+  | "goto" id = T_id  { St_goto id }
   | "return"  { St_return }
   | "new" e = option("[" e = expr "]" { e }) lv = l_value  { St_new (e, lv) }
   | "dispose" paren = option("[" "]" { () }) lv = l_value  { St_dispose (paren, lv) }
@@ -180,7 +180,7 @@ stmt:
 
 
 l_value:
-  | id = T_id  { Lv_id (id_of_string id) }
+  | id = T_id  { Lv_id id }
   | "result"  { Lv_result }
   | str = T_string_literal  { Lv_string str }
   | lv = l_value "[" e = expr "]"  { Lv_array (lv, e) }
@@ -205,7 +205,7 @@ r_value:
 call:
   | routine_name = T_id "(" args = separated_list(",", expr) ")"
     { 
-      let routine_name = id_of_string routine_name in
+      let routine_name = routine_name in
       { routine_name; args }
     }
 

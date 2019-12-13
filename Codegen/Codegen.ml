@@ -9,7 +9,7 @@ let void_type = void_type context
 let function_names : (string, unit) Hashtbl.t = Hashtbl.create 10  
 
 let function_name_gen id =
-  let name = string_of_id id in
+  let name = id in
   let rec try_add name =
   match Hashtbl.find_opt function_names name with
   | None -> Hashtbl.add function_names name (); name
@@ -43,7 +43,7 @@ and codegen_body { decls; block } ~symtbl =
 and codegen_local ~symtbl = function
   | Loc_var vars ->
     let build_id symtbl (id, pcl_type) =
-      let alloca_val = build_alloca (lltype_of_pcl_type pcl_type) (string_of_id id) builder in
+      let alloca_val = build_alloca (lltype_of_pcl_type pcl_type) id builder in
       add id alloca_val symtbl
     in
     List.fold_left build_id symtbl vars
@@ -69,3 +69,4 @@ and codegen_local ~symtbl = function
         function_type void_type (arraify_formal_types formals)
     in
     let f_val = define_function (function_name_gen id) header_type the_module in
+    ()
