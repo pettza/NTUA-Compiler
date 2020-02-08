@@ -1,0 +1,28 @@
+program llvm;
+    
+    var i : integer;
+    var i_ptr : ^integer;
+
+    function plus1(pluss : integer) : integer;
+    begin
+        result := pluss
+    end;
+
+    label bla;
+
+    begin
+        i_ptr := nil;
+    bla:
+        i_ptr := @i;
+        i := i_ptr^;
+        if true then
+            i := i + 1
+        else
+            goto bla
+        ;
+        i := plus1(i+1);
+        while i_ptr <> nil do
+        begin
+            i_ptr^ := i_ptr^ - 1
+        end
+    end.
