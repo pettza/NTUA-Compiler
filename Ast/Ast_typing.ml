@@ -4,6 +4,7 @@ open Symtbl
 
 exception TypingError of string
 
+
 let update_entry id sym_entry symtbl = 
   let check_duplicate sym_entry = function
     | None -> Some sym_entry
@@ -34,6 +35,7 @@ let update_entry id sym_entry symtbl =
         (Printf.sprintf "duplicate id %s" id)
   in
     update id (check_duplicate sym_entry) symtbl
+
 
 let ids_of_decls decls =
   let id_of_header = function
@@ -72,19 +74,24 @@ let check_duplicate_ids ids =
 let is_assignable lhs_type rhs_type =
   match lhs_type, rhs_type with
   | Typ_real, Typ_int -> true
-  | Typ_pointer Typ_array (Some _, pcl_type1), Typ_pointer Typ_array (None, pcl_type2)
+  | Typ_pointer (Some pcl_type), Typ_pointer None
+  | Typ_pointer None, Typ_pointer (Some pcl_type) -> true
+  | Typ_pointer (Some Typ_array (Some _, pcl_type1)), Typ_pointer (Some Typ_array (None, pcl_type2))
   | pcl_type1, pcl_type2 -> pcl_type1 = pcl_type2
 
 
 let is_referencable lhs_type rhs_type =
-  is_assignable (Typ_pointer lhs_type) (Typ_pointer rhs_type)
+  is_assignable (Typ_pointer (Some lhs_type)) (Typ_pointer (Some rhs_type))
+
+
+let library_symtbl =
+  let open Symtbl in
+  empty
+  |> add "writeInteger" @@ Procedure ([F_byval ("i", Typ_int)], { def=true })
 
 
 let rec typecheck_ast { prog_name; body } =
-  let symtbl = 
-    singleton prog_name Program 
-  in
-  typecheck_ast_body ~symtbl body
+  typecheck_ast_body ~symtbl:library_symtbl body
 
 
 and typecheck_ast_body ~symtbl { decls; block } =
@@ -140,8 +147,18 @@ and typecheck_add_ast_header def ~symtbl_loc = function
     check_duplicate_ids @@ id :: ids_of_formals formals;
     update_entry id (Function ((formals, pcl_type), { def=def })) symtbl_loc
 
+
 and typecheck_ast_stmt stmt ~symtbl =
   let check_label id =
+    try
+      match find id symtbl with
+      | Label _ -> ()
+      | _ ->
+        raise @@ TypingError (Printf.sprintf "%s is not a label" id)
+    with Not_found ->
+      raise @@ TypingError (Printf.sprintf "Undeclared label %s" id) 
+  in
+  let mark_label id =
     try
       match find id symtbl with
       | Label l when l.used = false -> l.used <- true
@@ -194,7 +211,7 @@ and typecheck_ast_stmt stmt ~symtbl =
     check_bool expr;
     typecheck_ast_stmt stmt ~symtbl
   | St_label (id, stmt) ->
-    check_label id;
+    mark_label id;
     typecheck_ast_stmt stmt ~symtbl
   | St_goto id -> check_label id
   | St_return -> ()
@@ -205,7 +222,7 @@ and typecheck_ast_stmt stmt ~symtbl =
       | None ->
         begin
           match l_type with
-          | Typ_pointer Typ_array (None, _) ->
+          | Typ_pointer (Some Typ_array (None, _)) ->
             raise @@ TypingError
               (Printf.sprintf
               "%s is a pointer to an incomplete array and should be array-allocated"
@@ -220,7 +237,7 @@ and typecheck_ast_stmt stmt ~symtbl =
       | Some Typ_int ->
         begin
           match l_type with
-          | Typ_pointer Typ_array (None, _) -> ()
+          | Typ_pointer (Some Typ_array (None, _)) -> ()
           | _ ->
             raise @@ TypingError
               (Printf.sprintf
@@ -234,33 +251,32 @@ and typecheck_ast_stmt stmt ~symtbl =
     end
   | St_dispose (paren_opt, lvalue) ->
     let l_type = type_of_ast_lvalue lvalue ~symtbl in
-      begin
-        match paren_opt with
-        | None ->
-          begin
-            match l_type with
-            | Typ_pointer Typ_array (None, _) ->
-              raise @@ TypingError
-                (Printf.sprintf
-                "%s is a pointer to an incomplete array and should be array-deallocated"
-                @@ Ast_print.string_of_ast_lvalue lvalue)
-            | Typ_pointer _ -> ()
-            | _ ->
-              raise @@ TypingError
-                (Printf.sprintf
-                "Cannot deallocate %s, it is not a pointer"
-                @@ Ast_print.string_of_ast_lvalue lvalue)
-          end
-        | Some () ->
+    begin
+      match paren_opt with
+      | None ->
+        begin
           match l_type with
-          | Typ_pointer Typ_array (None, _) -> ()
+          | Typ_pointer (Some Typ_array (None, _)) ->
+            raise @@ TypingError
+              (Printf.sprintf
+              "%s is a pointer to an incomplete array and should be array-deallocated"
+              @@ Ast_print.string_of_ast_lvalue lvalue)
+          | Typ_pointer _ -> ()
           | _ ->
             raise @@ TypingError
               (Printf.sprintf
-              "Cannot array-deallocate %s, it is not a pointer to an incomplete array"
+              "Cannot deallocate %s, it is not a pointer"
               @@ Ast_print.string_of_ast_lvalue lvalue)
-
-      end
+        end
+      | Some () ->
+        match l_type with
+        | Typ_pointer (Some Typ_array (None, _)) -> ()
+        | _ ->
+          raise @@ TypingError
+            (Printf.sprintf
+            "Cannot array-deallocate %s, it is not a pointer to an incomplete array"
+            @@ Ast_print.string_of_ast_lvalue lvalue)
+    end
 
 
 and type_of_ast_lvalue ~symtbl = function
@@ -305,7 +321,10 @@ and type_of_ast_lvalue ~symtbl = function
   | Lv_deref expr ->
     begin
       match type_of_ast_expr expr ~symtbl with
-      | Typ_pointer pcl_type -> pcl_type
+      | Typ_pointer (Some pcl_type) -> pcl_type
+      | Typ_pointer None ->
+        raise @@ TypingError
+        (Printf.sprintf "nil cannot be dereferenced")     
       | _ ->
         raise @@ TypingError
         (Printf.sprintf "%s is not a pointer and cannot be dereferenced"
@@ -318,9 +337,7 @@ and type_of_ast_rvalue ~symtbl = function
   | Rv_bool _ -> Typ_bool
   | Rv_real _ -> Typ_real
   | Rv_char _ -> Typ_char
-  | Rv_nil ->
-    (* Should be unreachable *)
-    failwith "This code should not be reachable. In function type_of_ast_rvalue"
+  | Rv_nil -> Typ_pointer None
   | Rv_call call ->
     begin
       match type_of_ast_call call ~symtbl with
@@ -330,7 +347,7 @@ and type_of_ast_rvalue ~symtbl = function
         raise @@ TypingError 
           (Printf.sprintf "Procedure %s cannot be called in expression" id)
     end
-  | Rv_ref lvalue -> Typ_pointer (type_of_ast_lvalue lvalue ~symtbl)
+  | Rv_ref lvalue -> Typ_pointer (Some (type_of_ast_lvalue lvalue ~symtbl))
   | Rv_unop (unop, expr) ->
     let e_type = type_of_ast_expr expr ~symtbl in 
     typecheck_unop unop e_type;
@@ -408,7 +425,7 @@ and type_of_binop binop e1_type e2_type =
         (Printf.sprintf "Cannot check equality of %s"
         @@ Ast_print.string_of_type e1_type)
     in
-    if e1_type = e2_type
+    if is_assignable e1_type e2_type
     then Typ_bool
     else raise @@ TypingError "Type mismatch"
   | Bop_less | Bop_leq | Bop_greater | Bop_geq ->

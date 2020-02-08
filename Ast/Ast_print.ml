@@ -11,10 +11,11 @@ let rec string_of_type pcl_type =
   | Typ_real -> "real"
   | Typ_bool -> "bool"
   | Typ_char -> "char"
-  | Typ_array (None, pcl_type) -> Printf.sprintf "array [] of %s" (string_of_type pcl_type)
+  | Typ_array (None, pcl_type) -> Printf.sprintf "array [] of %s" @@ string_of_type pcl_type
   | Typ_array (Some size, pcl_type) -> 
-    Printf.sprintf "array [%s] of %s" (string_of_int size) (string_of_type pcl_type)
-  | Typ_pointer pcl_type -> Printf.sprintf "pointer of %s" (string_of_type pcl_type)
+    Printf.sprintf "array [%s] of %s" (string_of_int size) @@ string_of_type pcl_type
+  | Typ_pointer pcl_type_opt ->
+    Printf.sprintf "pointer of %s" @@ string_of_type @@ Option.get pcl_type_opt
 
 
 let string_of_unop = function
@@ -42,7 +43,7 @@ let string_of_binop = function
 
 let string_of_list to_string = function
   | [] -> ""
-  | h::t -> List.fold_left (fun acc x -> Printf.sprintf "%s, %s" acc (to_string x)) (to_string h) t
+  | h::t -> List.fold_left (fun acc x -> Printf.sprintf "%s, %s" acc @@ to_string x) (to_string h) t
 
 
 let string_of_id_list = string_of_list (fun x -> x)

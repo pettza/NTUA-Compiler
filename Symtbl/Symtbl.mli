@@ -15,7 +15,7 @@ type pcl_type =
   | Typ_bool
   | Typ_char
   | Typ_array of int option * pcl_type
-  | Typ_pointer of pcl_type
+  | Typ_pointer of pcl_type option
 (** Type of pcl types *)
 
 

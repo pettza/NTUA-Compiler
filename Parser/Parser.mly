@@ -142,7 +142,7 @@ pcl_noarray_type:
   | "real"  { Typ_real }
   | "boolean"  { Typ_bool }
   | "char"  { Typ_char }
-  | "^" t = pcl_type  { Typ_pointer t }
+  | "^" t = pcl_type  { Typ_pointer (Some t) }
 
 
 pcl_complete_type:
