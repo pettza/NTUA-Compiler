@@ -140,7 +140,7 @@ and string_of_ast_rvalue = function
   | Rv_int inum -> string_of_int inum
   | Rv_bool bool -> string_of_bool bool
   | Rv_real fnum -> string_of_float fnum
-  | Rv_char c -> Printf.sprintf "'%s'"(Char.escaped c)
+  | Rv_char c -> Printf.sprintf "'%s'" (Char.escaped c)
   | Rv_nil -> "nil"
   | Rv_call call -> string_of_ast_call call
   | Rv_ref lvalue -> Printf.sprintf "@%s" (string_of_ast_lvalue lvalue)

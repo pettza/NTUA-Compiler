@@ -1,6 +1,7 @@
  {
   open Parser
 
+
   let incr_linenum lexbuf =
     let pos = lexbuf.Lexing.lex_curr_p in
     lexbuf.Lexing.lex_curr_p <- { pos with
@@ -8,6 +9,8 @@
       Lexing.pos_bol = pos.Lexing.pos_cnum
     }
 
+
+  (* Maps the escaped characters to the character they represent *)
   let char_for_backslash = function
     'n' -> '\010'
   | 'r' -> '\013'
@@ -15,8 +18,11 @@
   | 't' -> '\009'
   | c   -> c
 
+
+  (* Exception comprised of a message, filename, line number and column number *)
   exception Lexical_error of string * string * int * int
   
+
   let raise_lexical_error lexbuf msg =
     let p = Lexing.lexeme_start_p lexbuf in
     raise (Lexical_error (msg,
@@ -25,6 +31,8 @@
                           p.Lexing.pos_cnum - p.Lexing.pos_bol + 1))
 }
 
+
+(* Useful regular expressions *)
 let digit = ['0'-'9']
 let frac = '.' digit*
 let exp = ['e' 'E'] ['-' '+']? digit+
@@ -34,6 +42,7 @@ let id = (small_letter | big_letter) (small_letter | big_letter | digit | '_')*
 let white = [' ' '\t']
 let newline = ['\r' '\n']
 let esc = '\\'['n' 't' 'r' '0' '\\' '\"' '\'']
+
 
 rule lexer = parse
 | '.' { T_dot }
@@ -108,11 +117,12 @@ rule lexer = parse
   }
 | eof { T_eof }
 
+
 and string acc = parse
 | '\"' { acc }
 | newline
   { raise_lexical_error lexbuf
-      (Printf.sprintf "newline charecter inside string literal")
+      (Printf.sprintf "Newline character inside string literal")
   }
 | esc 
   { let c = Char.escaped @@ char_for_backslash @@ Lexing.lexeme_char lexbuf 1 in
@@ -120,9 +130,10 @@ and string acc = parse
   }
 | '\\' (_ as c)
   { raise_lexical_error lexbuf
-      (Printf.sprintf "illegal escape sequence \\%c" c)
+      (Printf.sprintf "Illegal escape sequence \\%c" c)
   }
 | _ as c { string (acc ^ (Char.escaped c)) lexbuf }
+
 
 and comment = parse
 | "*)" { lexer lexbuf }

@@ -97,10 +97,7 @@
 
 program:
   | "program" prog_name = T_id ";" body = body "." T_eof
-    {
-      let prog_name = prog_name in 
-      { prog_name; body }
-    }
+    { { prog_name; body } }
 
 
 body:
@@ -108,14 +105,14 @@ body:
 
 
 id_list:
-  | l = separated_nonempty_list(",", T_id) { l }
+  | l = separated_nonempty_list(",", T_id)  { l }
 
 
 local:
-  | "var" l = nonempty_list( l = id_list ":" t = pcl_type ";" { List.map (fun id -> (id, t)) l }) 
+  | "var" l = nonempty_list( l = id_list ":" t = pcl_type ";"  { List.map (fun id -> (id, t)) l }) 
     { Loc_var (List.concat l) }
   | "label" l = id_list ";"  { Loc_label l }
-  | h = header ";" b = body ";"  { Loc_def (h, b)}
+  | h = header ";" b = body ";"  { Loc_def (h, b) }
   | "forward" h = header ";"  { Loc_decl h }
 
 
@@ -134,7 +131,7 @@ header:
 
 formal:
   | "var" l = id_list ":" t = pcl_type  { List.map (fun id -> F_byref(id, t)) l }
-  | l = id_list ":" t = pcl_noarray_type { List.map (fun id -> F_byval(id, t)) l }
+  | l = id_list ":" t = pcl_noarray_type  { List.map (fun id -> F_byval(id, t)) l }
 
 
 pcl_noarray_type:
@@ -146,12 +143,12 @@ pcl_noarray_type:
 
 
 pcl_complete_type:
-  | t = pcl_noarray_type { t }
-  | "array" "[" size =  T_int_const "]" "of" t = pcl_complete_type  { Typ_array (Some size, t) }
+  | t = pcl_noarray_type  { t }
+  | "array" "[" size = T_int_const "]" "of" t = pcl_complete_type  { Typ_array (Some size, t) }
 
 
 pcl_type:
-  | t = pcl_complete_type { t }
+  | t = pcl_complete_type  { t }
   | "array" "of" t = pcl_complete_type  { Typ_array (None, t) }
 
 
@@ -163,7 +160,7 @@ stmt:
   |  { St_empty }
   | lv = l_value ":=" e = expr  { St_assign (lv, e) }
   | b = block  { St_block b }
-  | c = call { St_call c }
+  | c = call  { St_call c }
   | "if" e = expr "then" s = stmt  { St_if (e, s, None) }
   | "if" e = expr "then" s1 = stmt "else" s2 = stmt  { St_if (e, s1, Some s2) }
   | "while" e = expr "do" s = stmt  { St_while (e, s) }

@@ -1,4 +1,4 @@
-(** Types for the abstract syntax tree and funtions to handle it *)
+(** Types for the abstract syntax tree *)
 
 open Symtbl
 
@@ -77,7 +77,7 @@ and ast_call = { routine_name : id; args : ast_expr list }
 and ast_expr =
   | E_lvalue of ast_lvalue
   | E_rvalue of ast_rvalue
-(** Type of expration *)
+(** Type of expression *)
 
 
 and ast_lvalue =
