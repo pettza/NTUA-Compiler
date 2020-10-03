@@ -418,7 +418,7 @@ and type_of_binop binop e1_type e2_type =
         (Printf.sprintf "Cannot check equality of %s"
         @@ Ast_print.string_of_type e1_type)
     in
-    if e1_type == e2_type
+    if e1_type = e2_type
     then Typ_bool
     else raise @@ TypingError "Type mismatch"
   | Bop_less | Bop_leq | Bop_greater | Bop_geq ->
