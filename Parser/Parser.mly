@@ -118,15 +118,9 @@ local:
 
 header:
   | "procedure" id = T_id "(" l = separated_list(";", formal) ")" 
-    { 
-      let id = id in
-      H_proc (id, List.concat l)
-    }
+    { H_proc (id, List.concat l) }
   | "function" id = T_id "(" l = separated_list(";", formal) ")" ":" t = pcl_noarray_type
-    {
-      let id = id in
-      H_func (id, (List.concat l, t))
-    }
+    { H_func (id, (List.concat l, t)) }
 
 
 formal:
@@ -201,10 +195,7 @@ r_value:
 
 call:
   | routine_name = T_id "(" args = separated_list(",", expr) ")"
-    { 
-      let routine_name = routine_name in
-      { routine_name; args }
-    }
+    { { routine_name; args } }
 
 
 %inline unop:
