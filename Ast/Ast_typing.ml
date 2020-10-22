@@ -6,7 +6,7 @@ exception TypingError of string
 
 
 (* Checks if the id already exists in the symbol table, if it doesn't,
-it adds, otherwise it updates the entry only in the case that the
+it adds it, otherwise it updates the entry only in the case that the
 previous entry was the forward declaration of a routine and the one
 that replaces it is its implementation *)
 let update_entry id sym_entry symtbl = 
@@ -69,12 +69,17 @@ let is_assignable lhs_type rhs_type =
   | Typ_real, Typ_int -> true
   | Typ_pointer (Some _), Typ_pointer None
   | Typ_pointer None, Typ_pointer (Some _) -> true
-  | Typ_pointer (Some Typ_array (Some _, pcl_type1)), Typ_pointer (Some Typ_array (None, pcl_type2))
+  | Typ_pointer (Some Typ_array (None, pcl_type1)), Typ_pointer (Some Typ_array (Some _, pcl_type2)) ->
+    pcl_type1 = pcl_type2
+  | Typ_pointer (Some Typ_array (None, _)), pcl_type ->
+    raise @@ TypingError
+     (Printf.sprintf "Value of type %s cannot be assigned to incomplete array"
+     @@ Ast_print.string_of_type pcl_type)
   | pcl_type1, pcl_type2 -> pcl_type1 = pcl_type2
 
 
 (* Checks whether an a value of rhs_type can be passed by reference
-to a formal argument of value lhs_type *)
+to a formal argument of type lhs_type *)
 let is_referencable lhs_type rhs_type =
   is_assignable (Typ_pointer (Some lhs_type)) (Typ_pointer (Some rhs_type))
 
@@ -96,7 +101,17 @@ and typecheck_ast_body ~symtbl { decls; block } =
   let symtbl' =
     List.fold_left (fun symtbl_loc -> typecheck_add_ast_local ~symtbl ~symtbl_loc) empty decls
   in
-  typecheck_ast_block ~symtbl:(add_tbl symtbl symtbl') block
+  let check_used_labels () =
+    decls
+    |> List.filter_map (function Loc_label l -> Some l | _ -> None)
+    |> List.concat
+    |> List.map (fun id -> (id, find id symtbl'))
+    |> List.find_opt (function (_, Label { used=false }) -> true | _ -> false)
+    |> Option.map (fun (id, _) -> raise @@ TypingError (Printf.sprintf "Usused label %s" id))
+  in
+  typecheck_ast_block ~symtbl:(add_tbl symtbl symtbl') block;
+  ignore @@ check_used_labels ()
+
 
 
 (* Typechecks local declarations and returns an updated symbol table.
