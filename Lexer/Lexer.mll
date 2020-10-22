@@ -48,7 +48,7 @@ rule lexer = parse
 | '.' { T_dot }
 | digit+ as inum { T_int_const (int_of_string inum) }
 | digit* frac? exp? as fnum { T_real_const (float_of_string fnum) }
-| '\'' [^ '\\'] '\'' { T_char_const (Lexing.lexeme_char lexbuf 1) }
+| '\'' [^ '\\' '\'' '\"'] '\'' { T_char_const (Lexing.lexeme_char lexbuf 1) }
 | '\'' esc '\'' { T_char_const (char_for_backslash @@ Lexing.lexeme_char lexbuf 2)  }
 | '\'' '\\' (_ as c)
     { raise_lexical_error lexbuf
@@ -125,7 +125,7 @@ and string acc = parse
       (Printf.sprintf "Newline character inside string literal")
   }
 | esc 
-  { let c = Char.escaped @@ char_for_backslash @@ Lexing.lexeme_char lexbuf 1 in
+  { let c = char_for_backslash @@ Lexing.lexeme_char lexbuf 1 in
     string (acc ^ c) lexbuf
   }
 | '\\' (_ as c)
