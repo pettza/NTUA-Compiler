@@ -107,7 +107,7 @@ and typecheck_ast_body ~symtbl { decls; block } =
     |> List.concat
     |> List.map (fun id -> (id, find id symtbl'))
     |> List.find_opt (function (_, Label { used=false }) -> true | _ -> false)
-    |> Option.map (fun (id, _) -> raise @@ TypingError (Printf.sprintf "Usused label %s" id))
+    |> Option.map (fun (id, _) -> raise @@ TypingError (Printf.sprintf "Unused label %s" id))
   in
   typecheck_ast_block ~symtbl:(add_tbl symtbl symtbl') block;
   ignore @@ check_used_labels ()
