@@ -17,9 +17,9 @@ try
   Ast_typing.typecheck_ast ast;
   Ast_print.print_ast ast;
   let the_module = Codegen.codegen ast in
-  Llvm.print_module (fname ^ ".ll") the_module;
+  Llvm.print_module (fname ^ ".ll") the_module
 with Parsing.Parse_error | Parser.Error -> 
-  Printf.eprintf "syntax error: %s\n" (Lexing.lexeme lexbuf);
+  Printf.eprintf "Syntax error: %s\n" (Lexing.lexeme lexbuf);
   exit 1
 | Ast_typing.TypingError msg ->
   Printf.eprintf "%s\n" msg;

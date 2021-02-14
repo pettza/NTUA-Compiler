@@ -6,16 +6,22 @@ open Ast
 let context = global_context ()
 let the_module = create_module context "llvm program"
 let builder = builder context
-let void_type = void_type context
+
+
+(* Hashtable mapping the ids of routines in the program to the
+the names used by llvm. Is is needed due to name shadowing *)
 let function_names : (string, string) Hashtbl.t = Hashtbl.create 10
 
 
-let int_type = i64_type context
+(* lltypes for the basic pcl types *)
+let void_type = void_type context
+let int_type  = i64_type context
 let real_type = x86fp80_type context
 let bool_type = i8_type context
 let char_type = i8_type context
 
 
+(* Function mapping pcl types to lltypes *)
 let rec lltype_of_pcl_type = function
   | Typ_int -> int_type
   | Typ_real -> real_type
@@ -27,16 +33,21 @@ let rec lltype_of_pcl_type = function
   | Typ_array (Some n, pcl_type) ->
     array_type (lltype_of_pcl_type pcl_type) n
   | Typ_array (None, pcl_type) ->
-    pointer_type @@ lltype_of_pcl_type pcl_type
+    array_type (lltype_of_pcl_type pcl_type) 0
 
 
+(* Generates a new name for a routine and adds it to the hashtable *)
 let function_name_gen id =
   match Hashtbl.find_opt function_names id with
+  (* If the id does not already exist then add it as it is *)
   | None -> Hashtbl.add function_names id id; id
   | Some old_id ->
     let func_llvalue = Option.get @@ lookup_function old_id the_module in
     match basic_blocks func_llvalue with
+    (* If the function has no basic blocks then it was forward declared
+    and is now implemented so return the already registered name *)
     | [||] -> old_id
+    (* Otherwise append a '$' to the end of the previous name *)
     | _ ->
       let new_id = old_id ^ "$" in
         Hashtbl.add function_names id new_id; new_id
@@ -47,8 +58,8 @@ let lltype_of_header header =
     Array.of_list
     @@
     List.map
-      (function | F_byref (_, pcl_type) 
-                | F_byval (_, pcl_type) -> pointer_type @@ lltype_of_pcl_type pcl_type)
+      (function | F_byref (_, pcl_type) -> pointer_type @@ lltype_of_pcl_type pcl_type
+                | F_byval (_, pcl_type) -> lltype_of_pcl_type pcl_type)
       formals
   in
   match header with
@@ -66,9 +77,11 @@ let lltype_of_header header =
   in
   () *)
 
-let rec codegen { prog_name; body } =
-  let main_type = function_type void_type [| void_type |] in
-  let main = declare_function ("main$" ^ prog_name) main_type the_module in
+
+let rec codegen { prog_name=_; body } =
+  let main_type = function_type void_type [||] in
+  let main_id = function_name_gen "main" in
+  let main = declare_function main_id main_type the_module in
   let bb = append_block context "entry" main in
   position_at_end bb builder; 
   codegen_body body ~symtbl:empty;
@@ -124,14 +137,19 @@ and codegen_local ~symtbl = function
       | H_proc (_, formals)
       | H_func (_, (formals, _)) -> formals
     in
-    let codegen_formals ~symtbl = function
-      | F_byval (id, pcl_type) ->
-        let alloc = build_alloca (lltype_of_pcl_type pcl_type) "alloca" builder in
-        build_store 
-      | F_byref (id, pcl_type)
+    let codegen_formal symtbl = function
+      | F_byval (id, pcl_type), p ->
+        let alloca_val = build_alloca (lltype_of_pcl_type pcl_type) "alloca" builder in
+        let symtbl' = add id alloca_val symtbl in
+        ignore @@ build_store p alloca_val builder;
+        symtbl'
+      | F_byref (id, _), p -> add id p symtbl    
     in
-    codegen_formals formals;
-    codegen_body body ~symtbl:symtbl'';
+    let symtbl''' =
+      List.fold_left codegen_formal symtbl'' @@ List.combine formals
+      @@ Array.to_list @@ params func_val;
+    in
+    codegen_body body ~symtbl:symtbl''';
     let _ =
       match header with
       | H_func _ ->
@@ -150,8 +168,14 @@ and codegen_stmt ~symtbl = function
   | St_empty -> ()
   | St_assign (lvalue, expr) ->
     let l_llvalue = codegen_lvalue lvalue ~symtbl in
+    let l_lltype = element_type @@ type_of l_llvalue in
     let e_llvalue = codegen_expr expr ~symtbl in
-    ignore @@ build_store e_llvalue l_llvalue builder
+    let e_llvalue' =
+      if l_lltype == type_of e_llvalue
+      then e_llvalue
+      else build_bitcast e_llvalue l_lltype "bitcast" builder
+    in
+    ignore @@ build_store e_llvalue' l_llvalue builder
   | St_block block -> codegen_block ~symtbl block
   | St_call call -> ignore @@ codegen_call call ~symtbl
   | St_if (expr, then_stmt, else_stmt_opt) ->
@@ -163,8 +187,6 @@ and codegen_stmt ~symtbl = function
       let bb = append_block context name parent in
       position_at_end bb builder;
       codegen_stmt stmt ~symtbl;
-      let new_bb = insertion_block builder in
-      position_at_end new_bb builder;
       ignore @@ build_br cont_bb builder;
       bb
     in
@@ -208,22 +230,34 @@ and codegen_stmt ~symtbl = function
     else
       let res = build_load (find "result" symtbl) "load" builder in
       build_ret res builder 
-  | St_new (_, _) -> ()
-  | St_dispose (_, _) -> ()
+  | St_new (expr, lv) ->
+    let l_llvalue = codegen_lvalue lv ~symtbl in
+    let malloc_type = element_type @@ element_type @@ type_of l_llvalue in
+    ignore @@
+    let new_llvalue =
+      match expr with
+      | Some e ->
+        let e_llvalue = codegen_expr e ~symtbl in
+        build_array_malloc malloc_type e_llvalue "new" builder
+      | None ->
+        build_malloc malloc_type "new" builder
+    in
+    build_store new_llvalue l_llvalue builder
+  | St_dispose (_, lv) ->
+    let l_llvalue = codegen_lvalue lv ~symtbl in
+    ignore @@ build_free l_llvalue builder
 
 
 and codegen_lvalue ~symtbl = function
   | Lv_id id -> find id symtbl
   | Lv_result -> find "result" symtbl
-  | Lv_string str -> const_stringz context str
+  | Lv_string str -> build_global_string str "str" builder
   | Lv_array (lvalue, expr) ->
     let l_llvalue = codegen_lvalue lvalue ~symtbl in
     let e_llvalue = codegen_expr expr ~symtbl in
-    build_gep l_llvalue [| e_llvalue |] "gep" builder
-  | Lv_deref expr ->
-    let e_llvalue = codegen_expr expr ~symtbl in
     let zero = const_int int_type 0 in
-    build_gep e_llvalue [| zero |] "gep" builder
+    build_gep l_llvalue [| zero; e_llvalue |] "gep" builder
+  | Lv_deref expr -> codegen_expr expr ~symtbl
 
 
 and codegen_rvalue ~symtbl = function
@@ -245,7 +279,19 @@ and codegen_expr ~symtbl = function
 
 and codegen_call { routine_name; args; } ~symtbl =
   let func_val = find routine_name symtbl in
-  let args_array = Array.of_list @@ List.map (codegen_expr ~symtbl) args in
+  let codegen_arg = function
+  | E_rvalue arg, _ -> codegen_rvalue arg ~symtbl
+  | E_lvalue arg, param_type ->
+    let l_llvalue = codegen_lvalue ~symtbl arg in
+    let l_lltype = type_of l_llvalue in
+    if element_type l_lltype == param_type
+    then build_load l_llvalue "load" builder
+    else if l_lltype == param_type
+         then l_llvalue
+         else build_bitcast l_llvalue param_type "bitcast" builder
+  in
+  let args_types = Array.to_list @@ Array.map type_of @@ params func_val in
+  let args_array = Array.of_list @@ List.map codegen_arg @@ List.combine args args_types in
   build_call func_val args_array "call" builder
 
 
@@ -260,22 +306,24 @@ and codegen_unop unop expr ~symtbl =
 and codegen_binop binop lhs rhs ~symtbl =
   let lhs_llvalue = codegen_expr lhs ~symtbl in
   let rhs_llvalue = codegen_expr rhs ~symtbl in
+  let lhs_ltype = type_of lhs_llvalue in
+  let rhs_ltype = type_of rhs_llvalue in
+  let build_arithmetic build_iop build_fop =
+    if lhs_ltype = int_type && rhs_ltype = int_type then
+      build_iop lhs_llvalue rhs_llvalue "iop" builder 
+    else if lhs_ltype = int_type && rhs_ltype = real_type then
+      let lhs_llvalue' = build_sitofp lhs_llvalue real_type "cast" builder in
+      build_fop lhs_llvalue' rhs_llvalue "fop" builder
+    else if lhs_ltype = real_type && rhs_ltype = int_type then
+      let rhs_llvalue' = build_sitofp rhs_llvalue real_type "cast" builder in
+      build_fop lhs_llvalue rhs_llvalue' "fop" builder
+    else
+      build_fop lhs_llvalue rhs_llvalue "fop" builder
+  in
   match binop with
-  | Bop_plus ->
-    if type_of lhs_llvalue = int_type then
-      build_add lhs_llvalue rhs_llvalue "plus" builder
-    else
-      build_fadd lhs_llvalue rhs_llvalue "fplus" builder  
-  | Bop_minus ->
-    if type_of lhs_llvalue = int_type then
-      build_sub lhs_llvalue rhs_llvalue "sub" builder
-    else
-      build_fsub lhs_llvalue rhs_llvalue "fsub" builder
-  | Bop_times ->
-    if type_of lhs_llvalue = int_type then
-      build_mul lhs_llvalue rhs_llvalue "mul" builder
-    else
-      build_fmul lhs_llvalue rhs_llvalue "fmul" builder
+  | Bop_plus -> build_arithmetic build_add build_fadd
+  | Bop_minus -> build_arithmetic build_sub build_fsub
+  | Bop_times -> build_arithmetic build_mul build_fmul
   | Bop_rdiv -> build_fdiv lhs_llvalue rhs_llvalue "fdiv" builder
   | Bop_div -> build_sdiv lhs_llvalue rhs_llvalue "div" builder
   | Bop_mod -> build_srem lhs_llvalue rhs_llvalue "srem" builder

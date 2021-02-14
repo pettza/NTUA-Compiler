@@ -1,8 +1,13 @@
 program string_chars;
 
-    var s : array of char; c : char;
+    var a : array [3] of char; c : ^char; s : ^array of char;
 
     begin
-        s := "\n"; 
-        c := ''';
+        a := "sd";
+        a[1] := 'a';
+        s := @"aa";
+        s^[1] := 's';
+        new c;
+        c^ := 'c';
+        dispose c
     end.
