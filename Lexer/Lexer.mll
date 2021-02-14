@@ -125,7 +125,7 @@ and string acc = parse
       (Printf.sprintf "Newline character inside string literal")
   }
 | esc 
-  { let c = char_for_backslash @@ Lexing.lexeme_char lexbuf 1 in
+  { let c = String.make 1 @@ char_for_backslash @@ Lexing.lexeme_char lexbuf 1 in
     string (acc ^ c) lexbuf
   }
 | '\\' (_ as c)
