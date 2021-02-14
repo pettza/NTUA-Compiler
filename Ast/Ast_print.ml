@@ -131,7 +131,7 @@ and string_of_ast_expr = function
 and string_of_ast_lvalue = function
   | Lv_id id -> id
   | Lv_result -> "result"
-  | Lv_string str -> Printf.sprintf "\"%s\"" str
+  | Lv_string str -> Printf.sprintf "\"%s\"" @@ String.escaped str
   | Lv_array (lvalue, expr) -> Printf.sprintf "%s[%s]" (string_of_ast_lvalue lvalue) (string_of_ast_expr expr)
   | Lv_deref expr -> Printf.sprintf "^(%s)" (string_of_ast_expr expr)
 
