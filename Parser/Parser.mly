@@ -1,6 +1,7 @@
 %{
   open Ast
-  open Symtbl
+  open Types
+  open Operators
 %}
 
 (* Flow control *)
@@ -35,7 +36,7 @@
 %token <string> T_string_literal
 
 (* Identidiers *)
-%token <string> T_id
+%token <Identifier.id> T_id
 
 (* Boolean stuff *)
 %token T_and "and"
@@ -101,7 +102,7 @@ program:
 
 
 body:
-  | decls = local* block = block  { { decls; block } }
+  | decls = local* block = block  { { decls = List.concat decls; block } }
 
 
 id_list:
@@ -109,11 +110,11 @@ id_list:
 
 
 local:
-  | "var" l = nonempty_list( l = id_list ":" t = pcl_type ";"  { List.map (fun id -> (id, t)) l }) 
-    { Loc_var (List.concat l) }
-  | "label" l = id_list ";"  { Loc_label l }
-  | h = header ";" b = body ";"  { Loc_def (h, b) }
-  | "forward" h = header ";"  { Loc_decl h }
+  | "var" l = nonempty_list( l = id_list ":" t = pcl_type ";"  { List.map (fun id -> Loc_var (id, t)) l }) 
+    { List.concat l }
+  | "label" l = id_list ";"  { List.map (fun id -> Loc_label id) l }
+  | h = header ";" b = body ";"  { [Loc_def (h, b)] }
+  | "forward" h = header ";"  { [Loc_decl h] }
 
 
 header:

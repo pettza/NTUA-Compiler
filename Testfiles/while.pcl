@@ -1,0 +1,11 @@
+program llvm;
+    var c : integer;
+    begin
+        c := 0;
+        while c < 5 do
+            begin
+                writeInteger(c);
+                c := c + 1
+            end;
+        writeChar('\n')
+    end.

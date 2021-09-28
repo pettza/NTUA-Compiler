@@ -16,6 +16,7 @@
   | 'r' -> '\013'
   | 'b' -> '\008'
   | 't' -> '\009'
+  | '0' -> '\000'
   | c   -> c
 
 
@@ -86,8 +87,8 @@ rule lexer = parse
 | "nil" { T_nil }
 | "dispose" { T_dispose }
 | '=' { T_eq }
-| '>' { T_less }
-| '<' { T_greater }
+| '<' { T_less }
+| '>' { T_greater }
 | "<>" { T_neq }
 | ">=" { T_geq }
 | "<=" { T_leq }

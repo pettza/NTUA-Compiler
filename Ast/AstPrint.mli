@@ -1,7 +1,9 @@
 (** Printing utilities for the abstract syntax tree *)
 
 open Ast
-open Symtbl
+open Types
+open Operators
+
 
 val print_ast : ast -> unit
 (** Prints the Ast *)

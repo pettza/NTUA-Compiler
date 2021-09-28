@@ -1,16 +1,12 @@
-(** Types for the abstract syntax tree *)
-
 open Identifier
 open Types
 open Operators
 
 
 type ast = { prog_name : id; body : ast_body }
-(** Type of the whole program *)
 
 
 and ast_body = { decls : ast_local list; block : ast_block }
-(** Type of body of program or routine *)
 
 
 and ast_local =
@@ -18,17 +14,14 @@ and ast_local =
   | Loc_label of id
   | Loc_def of ast_header * ast_body
   | Loc_decl of ast_header
-(** Type of local declarations/definitions *)
 
 
 and ast_header =
   | H_proc of id * proc_type
   | H_func of id * func_type
-(** Type of routine headers *)
 
 
 and ast_block = ast_stmt list
-(** Type of statement block *)
 
 
 and ast_stmt =
@@ -43,17 +36,14 @@ and ast_stmt =
   | St_return
   | St_new of ast_expr option * ast_lvalue
   | St_dispose of unit option * ast_lvalue
-(** Type of statement *)
 
 
 and ast_call = { routine_name : id; args : ast_expr list }
-(** Type of routine call *)
 
 
 and ast_expr =
   | E_lvalue of ast_lvalue
   | E_rvalue of ast_rvalue
-(** Type of expression *)
 
 
 and ast_lvalue =
@@ -62,7 +52,6 @@ and ast_lvalue =
   | Lv_string of string
   | Lv_array of ast_lvalue * ast_expr
   | Lv_deref of ast_expr
-(** Type of lvalue *)
 
 
 and ast_rvalue =
@@ -75,4 +64,3 @@ and ast_rvalue =
   | Rv_ref of ast_lvalue
   | Rv_unop of unop * ast_expr
   | Rv_binop of ast_expr * binop * ast_expr
-(** Type of rvalue *)

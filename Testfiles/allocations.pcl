@@ -1,0 +1,31 @@
+program llvm;
+    var f_ptr : ^real;
+    var a : ^array of integer;
+    var i, c : integer;
+    begin
+        new f_ptr;
+        f_ptr^ := 5.;
+        writeReal(f_ptr^);
+        writeChar('\n');
+        dispose f_ptr;
+
+        i := 5;
+        new [i] a;
+        
+        c := 0;
+        while c < i do
+            begin
+                a^[c] := c;
+                c := c + 1
+            end;
+        
+        c := 0;
+        while c < i do
+            begin
+                writeInteger(a^[c]);
+                c := c + 1
+            end;
+        writeChar('\n');
+        
+        dispose [] a;
+    end.

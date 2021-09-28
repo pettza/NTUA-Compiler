@@ -1,0 +1,24 @@
+program calls;
+    var i, j: integer;
+
+    function add(a, b : integer): integer;
+        begin
+            result := a + b
+        end;
+    
+    procedure add1(var a : integer);
+        begin
+            a := a + 1
+        end;    
+    
+    begin
+        i := 0;
+        j := 2;
+
+        writeInteger(add(i, j));
+        writeString("\n");
+
+        add1(i);
+        writeInteger(i);
+        writeString("\n");
+    end.

@@ -1,4 +1,4 @@
-open Ast
+open SemAst
 open Llvm
 
-val codegen : ast -> llmodule
+val codegen : sem_ast -> llmodule

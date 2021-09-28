@@ -1,5 +1,6 @@
 open Ast
-open Symtbl
+open Types
+open Operators
 
 
 let make_tabs ~tabs = String.make tabs '\t'
@@ -46,9 +47,6 @@ let string_of_list to_string = function
   | h::t -> List.fold_left (fun acc x -> Printf.sprintf "%s, %s" acc @@ to_string x) (to_string h) t
 
 
-let string_of_id_list = string_of_list (fun x -> x)
-
-
 let rec print_ast { prog_name; body } =
   Printf.printf "Program: %s\nBody:\n" prog_name;
   print_ast_body body ~tabs:1
@@ -62,11 +60,9 @@ and print_ast_body ~tabs { decls; block } =
 
 
 and print_ast_local ~tabs = function
-  | Loc_var vars ->
-    List.iter
-      (fun (id, pcl_type) -> Printf.printf "%s%s : %s\n" (make_tabs ~tabs) id (string_of_type pcl_type))
-      vars
-  | Loc_label labels -> Printf.printf "%s%s : labels\n" (make_tabs ~tabs) (string_of_id_list labels)
+  | Loc_var (id, pcl_type) ->
+    Printf.printf "%s%s : %s\n" (make_tabs ~tabs) id (string_of_type pcl_type)
+  | Loc_label label -> Printf.printf "%s%s : label\n" (make_tabs ~tabs) label
   | Loc_def (header, body) -> print_ast_header header ~tabs; print_ast_body body ~tabs:(tabs+1)
   | Loc_decl header -> print_ast_header header ~tabs
 

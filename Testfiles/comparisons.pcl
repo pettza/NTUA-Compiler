@@ -1,0 +1,42 @@
+program string_chars;
+    var i1, i2 : integer;
+    var f1, f2 : real;
+    var b1, b2 : boolean;
+    var p1, p2 : ^integer;
+    begin
+        (* Initialization *)
+        i1 := 0;
+        i2 := 1;
+        f1 := 0;
+        f2 := 1;
+        b1 := true;
+        b2 := false;
+        p1 := nil;
+        p2 := nil;
+        
+        (* Tests *)
+        if i1 = i2 then
+            writeString("Wrong int eq\n")
+        else
+            writeString("Correct int eq\n")
+        ;
+        if f1 = f2 then
+            writeString("Wrong real eq\n")
+        else
+            writeString("Correct real eq\n")
+        ;
+        if i1 = f1 then
+            writeString("Correct mixed eq\n")
+        else
+            writeString("Wrong mixed eq\n")
+        ;
+        if b1 <> b2 then
+            writeString("Correct int eq\n")
+        else
+            writeString("Wrong int eq\n")
+        ;
+        if p1 = p2 then
+            writeString("Correct int eq\n")
+        else
+            writeString("Wrong int eq\n")
+    end.

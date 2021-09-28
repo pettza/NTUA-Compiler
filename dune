@@ -2,6 +2,14 @@
 
 
 (executable
- (name Main)
- (modules_without_implementation ast)
- (libraries llvm))
+ (name pcl)
+ (promote (until-clean))
+ (libraries llvm
+            llvm.bitwriter
+            llvm.analysis
+            llvm.target
+            llvm.all_backends
+            llvm_X86
+            llvm.scalar_opts
+            llvm.ipo)
+)

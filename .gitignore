@@ -1,5 +1,7 @@
 _build
-*/.merlin
-.merlin
+*.merlin
 .vscode
-*.ll
+pcl.exe
+lib.a
+Testfiles/*
+!Testfiles/*.pcl

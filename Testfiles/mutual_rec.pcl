@@ -1,0 +1,29 @@
+program mutual_rec;
+    var n : integer;
+
+    forward function even(n : integer): boolean;
+    forward function odd(n : integer): boolean;
+
+    function even(n : integer): boolean;
+        begin
+            if n = 0 then
+                result := true
+            else
+                result := odd(n - 1)
+        end;
+    
+    function odd(n : integer): boolean;
+        begin
+            if n = 0 then
+                result := false
+            else
+                result := even(n - 1)
+        end;
+    
+    begin
+        n := 2;
+        
+        writeString("Is 2 even?\n");
+        writeBoolean(even(n));
+        writeChar('\n')
+    end.
